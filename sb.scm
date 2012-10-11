@@ -1,11 +1,26 @@
 ;; [ Copyright (C) 2012 Dave Griffiths : GPLv3 see LICENCE ]
 
+;; todo:
+;; * middle click code select
+;; * palette move with mouse wheel
+;; * lock pallete items from drag/drop (lock all recusively?)
+;; * rotate/hide block
+;; * play flash insertion
+;; * execute flash block
+;; * resize block
+;; * load/save code
+;; * auto record edits
+;; * copy/paste
+
+;; * drop messed up from bottom
+;; * right click text edit
+
+
 (require mzlib/string)
 
 (require fluxus-018/fluxa)
 (searchpath "/home/dave/noiz/nm/")
 (reload)
-
 
 (clear)
 
@@ -17,7 +32,7 @@
   (newline))
 
 (define (println . args) (_println args))
-(define (dbg . args) (_println (cdr args)) (car args))
+(define (dbg . args) (_println args) (car args))
 
 (define (insert-to i p l)
   (cond
@@ -33,6 +48,12 @@
     ((zero? i) (cons v (list-replace (cdr l) (- i 1) v)))
     (else (cons (car l) (list-replace (cdr l) (- i 1) v)))))
 
+(define (in-list? a l)
+  (cond 
+   ((null? l) #f)
+   ((eq? (car l) a) #t)
+   (else (in-list? a (cdr l)))))
+
 (define (text-from-code code)
    (cond 
     ((string? code) 
@@ -42,7 +63,7 @@
     ((symbol? code) 
      (symbol->string code))))
 
-(define drop-fudge 1)
+(define drop-fudge 0)
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -97,6 +118,9 @@
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+(define (set-text text)
+  (text-params text (/ 16 256) (/ 16 256) 16 0 -0.01 0 15 -20 0.005 0.2))
+
 (define (make-brick text children)
   (let* ((atom (not children))
          (prim (build-polygons (if atom 4 8) 'triangle-strip))
@@ -113,7 +137,7 @@
                       (let ((text-prim (build-text text)))
                         (with-primitive 
                          text-prim
-                         (text-params text (/ 16 256) (/ 16 256) 16 0 -0.01 0 15 -20 0.005 0.2))
+                         (set-text text))
                         text-prim))))
     (with-primitive 
      prim
@@ -266,7 +290,8 @@
 (define (brick-ghost b) (list-ref b 2))
 (define (brick-modify-ghost f b) (list-replace b 2 (f (brick-ghost b))))
 (define ghost-pos car)
-(define ghost-size cadr)
+;(define ghost-size cadr)
+(define (ghost-size i) 1)
 (define empty-ghost (list #f 1))
 (define (brick-clear-ghost b) (brick-modify-ghost (lambda (g) empty-ghost) b))
 (define (brick-id b) (list-ref b 3))
@@ -275,6 +300,14 @@
 (define (brick-locked b) (list-ref b 6)) ; for the palette
 (define (brick-modify-locked f b) (list-replace b 6 (f (brick-locked b))))
 
+(define (brick-for-each fn b)
+  (fn b)
+  (when (brick-children b)
+        (for-each 
+         (lambda (c)
+           (brick-for-each fn c))
+         (brick-children b))))
+  
 (define (brick-modify-brick fn b id)
   ;; check ourself first
   (if (eq? (brick-id b) id) 
@@ -425,7 +458,7 @@
    (lambda (g) (list (brick-pos->slot b pos) size))
    b))
 
-(define (brick-dock b new pos)
+(define (brick-dock b new)
   (cond ((brick-locked b) b)
         (else
          (with-primitive 
@@ -434,7 +467,7 @@
           (parent (brick-id b)))
          (brick-modify-children
           (lambda (children)
-            (insert-to new (brick-pos->slot b pos) children))
+            (insert-to new (ghost-pos (brick-ghost b)) children))
           (brick-clear-ghost b)))))
 
 (define (brick-undock b id)
@@ -451,6 +484,9 @@
 
 ; update the primitive and children to match the state
 (define (brick-update! b d)
+  (with-primitive 
+   (brick-text-prim b)
+   (set-text (brick-text b)))
   (with-primitive 
    (brick-id b)
    (colour (vector 1 (/ (modulo d 6) 6) (/ (modulo d 4) 4))))
@@ -521,7 +557,7 @@
 ;---------------------------------------------------------  
 
 (define (make-bricks)
-  (list '() (vector 0 0 0) #f #f #f))
+  (list '() (vector 0 0 0) #f #f #f #f #f '() #f))
 
 (define (bricks-roots b) (list-ref b 0))
 (define (bricks-modify-roots f b) (list-replace b 0 (f (bricks-roots b))))
@@ -533,6 +569,14 @@
 (define (bricks-modify-current f b) (list-replace b 3 (f (bricks-current b))))
 (define (bricks-drop-over b) (list-ref b 4))
 (define (bricks-modify-drop-over f b) (list-replace b 4 (f (bricks-drop-over b))))
+(define (bricks-typing b) (list-ref b 5))
+(define (bricks-modify-typing f b) (list-replace b 5 (f (bricks-typing b))))
+(define (bricks-typing-current b) (list-ref b 6))
+(define (bricks-modify-typing-current f b) (list-replace b 6 (f (bricks-typing-current b))))
+(define (bricks-keys b) (list-ref b 7))
+(define (bricks-modify-keys f b) (list-replace b 7 (f (bricks-keys b))))
+(define (bricks-code-current b) (list-ref b 8))
+(define (bricks-modify-code-current f b) (list-replace b 8 (f (bricks-code-current b))))
 
 (define (bricks-modify-brick fn b id)
   (bricks-modify-roots
@@ -608,53 +652,136 @@
 (define (bricks-mouse-up b)
   (and (not (mouse-button 1)) (bricks-button b)))
 
+(define (bricks-key-pressed? b key)
+  (in-list? key (bricks-keys b)))
+
+(define (keys-contains-enter? keys)
+  (foldl
+   (lambda (key r)
+     (if (and (not r) (eq? (char->integer key) 13)) ; return
+         #t r))
+   #f
+   keys))
+
+(define (bricks-type-into b bx keys-pressed)
+  (foldl
+   (lambda (key r)
+     (if (char? key)             
+         (cond             
+          ((eq? (char->integer key) 8) ; delete (128 on mac)
+           (if (> (string-length (brick-text r)) 0)
+               (brick-modify-text
+                (lambda (t)
+                  (substring 
+                   t 0 (- (string-length t) 1)))
+                r) r))
+          (else
+           (brick-modify-text
+            (lambda (t)
+              (string-append t (string key)))
+            r)))
+         r))
+   bx
+   keys-pressed))
+
 (define (bricks-do-keys b)
-  (cond
-   ((key-pressed "x") 
-    (broadcast 1 (bricks->text b))
-    (eval-string (bricks->text b)
-                 (lambda (error)
-                   (broadcast 5 (exn-message error))))   
-    ))
-  b)
+  ;; get keys pressed since last update
+  (let ((keys-pressed
+         (filter
+          (lambda (key)
+            (not (in-list? key (bricks-keys b))))
+          (keys-down))))
+    (bricks-modify-keys 
+     (lambda (k) (keys-down))
+     ;; dispatch
+     (cond
+      ;; do typing if we have a current brick
+      ((bricks-typing-current b)
+       (bricks-modify-brick
+        (lambda (bx)
+          (bricks-type-into b bx keys-pressed))
+        (if (keys-contains-enter? keys-pressed)
+            (bricks-modify-typing-current 
+             (lambda (t) #f)
+             b)
+            b)
+        (brick-id (bricks-typing-current b))))
+      ;; do execute key
+      ((bricks-key-pressed? b "x") 
+       (broadcast 1 (bricks->text b))
+       (eval-string (bricks->text b)
+                    (lambda (error)
+                      (broadcast 5 (exn-message error))))
+       b)
+      (else b)))))
 
 (define (bricks-do-input b pos)
   (bricks-do-keys
    (bricks-modify-mouse 
     (lambda (m) pos)
-    (bricks-modify-button 
-     (lambda (button) (mouse-button 1))
-     ;; keep track of the selection
-     (bricks-modify-current
-      (lambda (current)
-        (cond 
-         ((bricks-mouse-down b) (println "mouse down") (bricks-get-over b pos))
-         ((bricks-mouse-up b) (println "mouse up") #f)
-         (else current)))
-      ;; if we are dragging something 
-      (if (bricks-current b)
-          ;; find what is underneath
-          (let* ((temp (bricks-get-over b (vadd pos (vector 0 drop-fudge 0))))
-                 (over (if (and temp (brick-is-atom? temp)) #f temp))
-                 (old-over (bricks-drop-over b)))
-            (bricks-modify-drop-over
-             (lambda (dropover) over)
-             (if over
-                 ;; update the ghost position
-                 (bricks-modify-brick
-                  (lambda (over)
-                    (brick-update-ghost over pos (brick-size (bricks-current b))))
-                  (if old-over
-                      ;; update the ghost for the old over brick
-                      (bricks-modify-brick
-                       (lambda (over)
-                         (brick-clear-ghost over))
-                       b
-                       (brick-id old-over))
-                      b)
-                  (brick-id over))
-                 b)))
-          b))))))
+    (bricks-modify-typing
+     (lambda (t) (mouse-button 3))
+     (bricks-modify-button 
+      (lambda (button) (mouse-button 1))
+      ;; keep track of the selection
+      (bricks-modify-current
+       (lambda (current)
+         (cond 
+          ((bricks-mouse-down b) 
+           (let ((c (bricks-get-over b pos)))
+             (brick-for-each
+              (lambda (c)
+                (with-primitive 
+                 (brick-id c)
+                 (opacity 0.2)
+                 (hint-nozwrite))
+                (with-primitive 
+                 (brick-depth c)
+                 (opacity 0.2)
+                 (hint-nozwrite)))
+              c)
+             c))
+          ((bricks-mouse-up b) 
+           (brick-for-each
+            (lambda (c)
+              (with-primitive 
+               (brick-id c)
+               (opacity 1)
+               (hint-none)(hint-unlit)(hint-solid))
+              (with-primitive 
+               (brick-depth c)
+              (opacity 1)
+              (hint-none)(hint-unlit)(hint-solid)))
+            current)
+           #f)
+          (else current)))
+       ;; if we are dragging something 
+       (if (bricks-current b)
+           ;; find what is underneath
+           (let* ((temp (bricks-get-over b pos))
+                  (over (if (and temp (brick-is-atom? temp)) #f temp))
+                  (old-over (bricks-drop-over b)))
+             (when (and over old-over (not (eq? (brick-id over) 
+                                                (brick-id old-over)))) 
+                   (println "modifying drop-over"))
+             (bricks-modify-drop-over
+              (lambda (dropover) over)
+              (if over
+                  ;; update the ghost position
+                  (bricks-modify-brick
+                   (lambda (over)
+                     (brick-update-ghost over pos (brick-size (bricks-current b))))
+                   (if old-over
+                       ;; update the ghost for the old over brick
+                       (bricks-modify-brick
+                        (lambda (over)
+                          (brick-clear-ghost over))
+                        b
+                        (brick-id old-over))
+                       b)
+                   (brick-id over))
+                  b)))
+           b)))))))
   
 (define (bricks-drag-start? b new-b)
   (and (not (list? (bricks-current b)))
@@ -668,7 +795,7 @@
   (and (list? (bricks-drop-over b))
        (not (list? (bricks-drop-over new-b)))))
 
-(define (bricks-do-docking b new-b pos)
+(define (bricks-do-docking b new-b)
   ;; check for brick to dock
   (if (and (bricks-drag-end? b new-b)
            (bricks-drop-over new-b))
@@ -678,7 +805,8 @@
         (bricks-remove-root
          (bricks-modify-brick 
           (lambda (new-parent)
-            (brick-dock new-parent (bricks-current b) pos))
+            ;; docks to ghost location
+            (brick-dock new-parent (bricks-current b)))
           new-b
           new-parent-id)
          id))
@@ -715,9 +843,24 @@
          new-b
          id))
       new-b))
- 
+
+(define (bricks-do-typing b new-b pos)
+  (if (and (not (bricks-typing b))
+           (bricks-typing new-b))
+      (bricks-modify-typing-current
+       (lambda (t)
+         (bricks-get-over new-b pos))
+       new-b)
+      ;; ended typing mode
+      new-b
+      #;(if (and (bricks-typing b)
+               (not (bricks-typing new-b)))
+          (bricks-modify-typing-current
+           (lambda (t) #f) new-b)
+          new-b)))
+                
 (define (bricks-update! b)
-  (let* ((pos (get-point-from-mouse)))
+  (let* ((pos (vadd (vector 0 drop-fudge 0) (get-point-from-mouse))))
     #;(with-primitive pointer
                     (identity)
                     (translate pos))
@@ -730,6 +873,12 @@
          (brick-update! b 0))
        (bricks-roots b)))
 
+    (let ((tc (bricks-typing-current b)))
+      (when tc
+          (with-primitive 
+           (brick-id tc)
+           (colour (+ 0.5 (fmod (* 4 (flxtime)) 0.5))))))
+
     ; move the current brick
     (when (list? (bricks-current b))
           (with-primitive 
@@ -738,17 +887,18 @@
                  (translate (vsub pos (bricks-mouse b))))))
 
     ; update the input stuff
-    (bricks-remove-ghost
-     b (bricks-do-docking  
-        b (bricks-do-undocking 
-           b (bricks-do-input b pos)) 
-        pos))))
+    (bricks-do-typing
+     b (bricks-remove-ghost
+        b (bricks-do-docking  
+           b (bricks-do-undocking 
+              b (bricks-do-input b pos)))) pos)))
 
 ;---------------------------------------------------------  
 
 (set-camera-transform (mtranslate (vector 0 0 -30)))
 
 ;(hint-wire)
+;(hint-box)
 
 (define b
   (bricks-add-code
@@ -783,11 +933,10 @@
 (setup (car (bricks-roots b)) (vector 20 10 0))
 (setup (cadr (bricks-roots b)) (vector 5 10 0))
 
-           
+(define pointer (with-state (scale 0.1) (build-cube)))           
 
 
 (clear-colour (vector 0.5 0.2 0.1))
-
 (define t (with-state 
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
@@ -795,5 +944,9 @@
 
 (every-frame 
  (begin
+   (with-primitive pointer
+                   (identity)
+                   (translate (get-point-from-mouse))
+                   (scale 0.1))
    (set! b (bricks-update! b))
    (with-primitive t (rotate (vector 1 2 3)))))
