@@ -3,10 +3,10 @@
 |   .-----------------.
 |   | Bricks          |
 |   +-----------------+-------------.
-|   | A Visual programming language |
-|   |   .------------------+--------'
-|   |   |   For Fluxus     |
-|   |   .------------------+----------.
+|   | A visual programming language |
+|   |   .---------------------+-----'
+|   |   |   For Scheme/Fluxus |
+|   |   .---------------------+-------.
 |   |   |   (C) 2012 Dave Griffiths   |
 |   |   .-------------+---------------'
 |   |   |   GPL v3    |
@@ -16,3 +16,32 @@
 |                |
 `----------------'
 
+Starting up:
+
+1. Install fluxus (http://www.pawfal.org/fluxus)
+2. In the scheme-bricks directory run start-audio.sh followed by start.sh
+
+(you can start/stop/restart the audio when running)
+
+When running:
+
+1. You should start with a black screen. 
+2. Use the mouse wheel or up/down cursor keys to make the menu appear on the right.
+3. Drag blocks from this menu and fit them together
+
+Keys:
+
+lmb+drag : move and build blocks
+rmb/"t"  : start editing text, enter to finish
+mmb/"h"  : highlight a block
+x        : execute highlighted block
+shift-c  : copy/paste highlighted block as new blocks
+,        : undo
+.        : redo
+F6       : clear everything, start over
+delete   : deletes the highlighted block 
+
+Todo:
+* Some errors do not get displayed on the screen
+
+BTW, the font comes from this game: www.oolite.org
