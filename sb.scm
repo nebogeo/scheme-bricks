@@ -3,13 +3,15 @@
 ;; todo:
 ;; * show/hide palette
 ;; * rotate/hide block
-;; * play flash insertion
-;; * execute flash block
-;; * resize block
 ;; * load/save code
 ;; * auto record edits
 ;; * copy/paste
+;; * click undock bug 
 
+;; * drag resized distance
+;; * resize block
+;; * execute flash block
+;; * play flash insertion
 ;; * middle click code select
 ;; * palette move with mouse wheel
 ;; * lock pallete items from drag/drop (lock all recusively?)
@@ -79,6 +81,7 @@
      (symbol->string code))))
 
 (define drop-fudge 0)
+(define lag-fudge 0.7)
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -176,45 +179,48 @@
      (apply-transform)
      (pdata-copy "p" "pref"))
   
-  (with-primitive 
+    (let ((depth -1))
+          
+
+    (with-primitive 
    depth-shape-prim
    (parent prim)
    (cond 
     (atom
-     (pdata-set! "p" 0 (vector -1 1 -3)) 
+     (pdata-set! "p" 0 (vector -1 1 depth)) 
      (pdata-set! "p" 1 (vector -1 1 0)) 
      (pdata-set! "p" 2 (vector 5 1 0))
-     (pdata-set! "p" 3 (vector 5 1 -3))
+     (pdata-set! "p" 3 (vector 5 1 depth))
      
      (pdata-set! "n" 0 (vector 0 1 0)) 
      (pdata-set! "n" 1 (vector 0 1 0)) 
      (pdata-set! "n" 2 (vector 0 1 0))
      (pdata-set! "n" 3 (vector 0 1 0))
      
-     (pdata-set! "p" 4 (vector 5 1 -3))
+     (pdata-set! "p" 4 (vector 5 1 depth))
      (pdata-set! "p" 5 (vector 5 1 0))
      (pdata-set! "p" 6 (vector 5 0 0))
-     (pdata-set! "p" 7 (vector 5 0 -3))
+     (pdata-set! "p" 7 (vector 5 0 depth))
      
      (pdata-set! "n" 4 (vector 1 0 0)) 
      (pdata-set! "n" 5 (vector 1 0 0)) 
      (pdata-set! "n" 6 (vector 1 0 0))
      (pdata-set! "n" 7 (vector 1 0 0))
      
-     (pdata-set! "p" 8 (vector 5 0 -3))
+     (pdata-set! "p" 8 (vector 5 0 depth))
      (pdata-set! "p" 9 (vector 5 0 0))
      (pdata-set! "p" 10 (vector -1 0 0)) 
-     (pdata-set! "p" 11 (vector -1 0 -3))
+     (pdata-set! "p" 11 (vector -1 0 depth))
      
      (pdata-set! "n" 8 (vector 0 -1 0)) 
      (pdata-set! "n" 9 (vector 0 -1 0)) 
      (pdata-set! "n" 10 (vector 0 -1 0))
      (pdata-set! "n" 11 (vector 0 -1 0))
      
-     (pdata-set! "p" 12 (vector -1 0 -3)) 
+     (pdata-set! "p" 12 (vector -1 0 depth)) 
      (pdata-set! "p" 13 (vector -1 0 0)) 
      (pdata-set! "p" 14 (vector -1 1 0))
-     (pdata-set! "p" 15 (vector -1 1 -3)) 
+     (pdata-set! "p" 15 (vector -1 1 depth)) 
      
      (pdata-set! "n" 12 (vector -1 0 0)) 
      (pdata-set! "n" 13 (vector -1 0 0)) 
@@ -222,8 +228,8 @@
      (pdata-set! "n" 15 (vector -1 0 0)))
     (else
      (pdata-set! "p" 0 (vector 0 0 0))
-     (pdata-set! "p" 1 (vector 0 0 -3))
-     (pdata-set! "p" 2 (vector 5 0 -3))
+     (pdata-set! "p" 1 (vector 0 0 depth))
+     (pdata-set! "p" 2 (vector 5 0 depth))
      (pdata-set! "p" 3 (vector 5 0 0))
      (pdata-set! "n" 0 (vector 0 -1 0))
      (pdata-set! "n" 1 (vector 0 -1 0))
@@ -231,8 +237,8 @@
      (pdata-set! "n" 3 (vector 0 -1 0))
      
      (pdata-set! "p" 4 (vector 5 0 0))
-     (pdata-set! "p" 5 (vector 5 0 -3))
-     (pdata-set! "p" 6 (vector 5 1 -3))
+     (pdata-set! "p" 5 (vector 5 0 depth))
+     (pdata-set! "p" 6 (vector 5 1 depth))
      (pdata-set! "p" 7 (vector 5 1 0))
      (pdata-set! "n" 4 (vector 1 0 0))
      (pdata-set! "n" 5 (vector 1 0 0))
@@ -240,26 +246,26 @@
      (pdata-set! "n" 7 (vector 1 0 0))
      
      (pdata-set! "p" 8 (vector 5 1 0))
-     (pdata-set! "p" 9 (vector 5 1 -3))
-     (pdata-set! "p" 10 (vector -1 1 -3))
+     (pdata-set! "p" 9 (vector 5 1 depth))
+     (pdata-set! "p" 10 (vector -1 1 depth))
      (pdata-set! "p" 11 (vector -1 1 0))
      (pdata-set! "n" 8 (vector 0 1 0))
      (pdata-set! "n" 9 (vector 0 1 0))
      (pdata-set! "n" 10 (vector 0 1 0))
      (pdata-set! "n" 11 (vector 0 1 0))
      
-     (pdata-set! "p" 12 (vector 0 0 -3))
+     (pdata-set! "p" 12 (vector 0 0 depth))
      (pdata-set! "p" 13 (vector 0 0 0))
      (pdata-set! "p" 14 (vector 0 0 0)) ; --
-     (pdata-set! "p" 15 (vector 0 0 -3)) ; --
+     (pdata-set! "p" 15 (vector 0 0 depth)) ; --
      (pdata-set! "n" 12 (vector 1 0 0))
      (pdata-set! "n" 13 (vector 1 0 0))
      (pdata-set! "n" 14 (vector 1 0 0))
      (pdata-set! "n" 15 (vector 1 0 0))                            
      
      (pdata-set! "p" 16 (vector -1 1 0))
-     (pdata-set! "p" 17 (vector -1 1 -3))
-     (pdata-set! "p" 18 (vector -1 -1 -3)) ;--
+     (pdata-set! "p" 17 (vector -1 1 depth))
+     (pdata-set! "p" 18 (vector -1 -1 depth)) ;--
      (pdata-set! "p" 19 (vector -1 -1 0)) ;--
      (pdata-set! "n" 16 (vector -1 0 0))
      (pdata-set! "n" 17 (vector -1 0 0))
@@ -267,8 +273,8 @@
      (pdata-set! "n" 19 (vector -1 0 0))                            
      
      (pdata-set! "p" 20 (vector -1 -1 0)) ;--
-     (pdata-set! "p" 21 (vector -1 -1 -3)) ;--
-     (pdata-set! "p" 22 (vector 5 -1 -3)) ;--
+     (pdata-set! "p" 21 (vector -1 -1 depth)) ;--
+     (pdata-set! "p" 22 (vector 5 -1 depth)) ;--
      (pdata-set! "p" 23 (vector 5 -1 0)) ;--
      (pdata-set! "n" 20 (vector 0 -1 0))
      (pdata-set! "n" 21 (vector 0 -1 0))
@@ -276,8 +282,8 @@
      (pdata-set! "n" 23 (vector 0 -1 0))                            
      
      (pdata-set! "p" 24 (vector 5 -1 0)) ;--
-     (pdata-set! "p" 25 (vector 5 -1 -3)) ;--
-     (pdata-set! "p" 26 (vector 5 0 -3)) ;--
+     (pdata-set! "p" 25 (vector 5 -1 depth)) ;--
+     (pdata-set! "p" 26 (vector 5 0 depth)) ;--
      (pdata-set! "p" 27 (vector 5 0 0)) ;--
      (pdata-set! "n" 24 (vector 1 0 0))
      (pdata-set! "n" 25 (vector 1 0 0))
@@ -285,15 +291,15 @@
      (pdata-set! "n" 27 (vector 1 0 0))                            
      
      (pdata-set! "p" 28 (vector 5 0 0)) ;--
-     (pdata-set! "p" 29 (vector 5 0 -3)) ;--
-     (pdata-set! "p" 30 (vector 0 0 -3)) ; --
+     (pdata-set! "p" 29 (vector 5 0 depth)) ;--
+     (pdata-set! "p" 30 (vector 0 0 depth)) ; --
      (pdata-set! "p" 31 (vector 0 0 0)) ; --
      (pdata-set! "n" 28 (vector 0 1 0))
      (pdata-set! "n" 29 (vector 0 1 0))
      (pdata-set! "n" 30 (vector 0 1 0))
      (pdata-set! "n" 31 (vector 0 1 0))))
    
-   (pdata-copy "p" "pref"))
+   (pdata-copy "p" "pref")))
 
   (list text children empty-ghost prim text-prim depth-shape-prim #f #f)))
 
@@ -364,7 +370,7 @@
              (cond
               (r r) ;; already found
               ((eq? (brick-id child) id) child)
-              (brick-search child id)))
+              (else (brick-search child id))))
            #f
            (brick-children b)))))
 
@@ -414,6 +420,15 @@
             (vector 1 0 0) 
             (vector 1 1 0) 
             (abs (sin (* (flxtime) 2)))))))
+
+(define (brick-get-scale b)
+  (with-primitive 
+   (brick-id b)
+   (let ((tx (get-transform)))
+     (vmag (vector
+            (vector-ref tx 0)
+            (vector-ref tx 5)
+            (vector-ref tx 11))))))
 
 (define (brick-expand! b n)
   (with-primitive 
@@ -472,9 +487,26 @@
   (substring str 0 (- (string-length str) 1)))
 
 (define (brick->code b)
-  (eval-string (string-append "'" (brick->text b))))
+  (eval-string (string-append "'" (brick->text b #f))))
 
-(define (brick->text b)
+;; does the flashing when it plays the sound business
+(define (brick-code-inserts b)
+  (cond 
+   ((and (eq? 2 (length (brick-children b)))
+         (string=? "play" (brick-text b)))
+    (string-append " 0 (lambda () (with-primitive " (number->string (brick-id b))
+                   " (colour (vector 1 1 1)))"
+                   "(with-primitive " (number->string (brick-depth b))
+                   " (colour (vector 1 1 1))))"))
+   ((and (eq? 3 (length (brick-children b)))
+               (string=? "play" (brick-text b)))
+    (string-append " (lambda () (with-primitive " (number->string (brick-id b))
+                   " (colour (vector 1 1 1)))"
+                   "(with-primitive " (number->string (brick-depth b))
+                   " (colour (vector 1 1 1))))"))
+   (else "")))
+  
+(define (brick->text b do-insert)
   (if (brick-is-atom? b)
       (brick-text b)
       (string-append
@@ -484,9 +516,9 @@
                               (map
                                (lambda (child)
                                  (string-append 
-                                  (brick->text child) " "))
-                               (brick-children b)))
-                       ""))")")))
+                                  (brick->text child do-insert) " "))
+                               (brick-children b)))))
+       (if do-insert (brick-code-inserts b) "") ")")))
 
 (define (brick->sexpr b)
   (if (brick-is-atom? b)
@@ -672,7 +704,8 @@
    (map brick->text 
         (filter (lambda (brx)
                   (not (brick-locked brx)))
-                (bricks-roots b)))))
+                (bricks-roots b))
+        #f)))
 
 (define (bricks->sexpr b)
   (apply list (map brick->sexpr (bricks-roots b))))
@@ -710,10 +743,20 @@
    #f
    (bricks-roots b)))
 
+;; look for the brick which is the parent of the supplied one
 (define (bricks-search-for-parent b id)
   (foldl
    (lambda (b r)
      (if (not r) (brick-search-for-parent b id) r))
+   #f
+   (bricks-roots b)))
+
+;; find out which root a brick belongs to
+(define (bricks-root-search b id)
+  (foldl
+   (lambda (root r)
+     (if (and (not r) (brick-search root id))
+         root r))
    #f
    (bricks-roots b)))
 
@@ -781,8 +824,8 @@
       ;; do execute key if we have a code selection
       ((and (in-list? #\x keys-pressed)   
             (bricks-code-current b))
-       (broadcast 1 (brick->text (bricks-code-current b)))
-       (eval-string (brick->text (bricks-code-current b))
+       (broadcast 1 (brick->text (bricks-code-current b) #t))
+       (eval-string (brick->text (bricks-code-current b) #t)
                     (lambda (error)
                       (broadcast 5 (exn-message error))))
        b)
@@ -836,17 +879,27 @@
        (bricks-do-dragging b pos)
        b)))
 
-(define (bricks-do-palette b)
-  (with-primitive 
-   (brick-id (bricks-palette b))
-   (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
-         (translate (vector 0 3 0)))
-   (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
-         (translate (vector 0 -3 0))))
-  b)
+(define (bricks-do-mouse-wheel b pos)
+  (let ((over (bricks-get-over b pos)))
+    (when over
+          (let ((root (bricks-root-search b (brick-id over))))
+            (if (brick-locked root) ;; it's the palette, translate
+                (with-primitive 
+                 (brick-id root)
+                 (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
+                       (translate (vector 0 3 0)))
+                 (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
+                       (translate (vector 0 -3 0))))
+                (with-primitive  ;; it's a normal brick, scale
+                 (brick-id root)
+                 (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
+                       (scale (vector 0.9 0.9 0.9)))
+                 (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
+                       (scale (vector 1.1 1.1 1.1)))))))
+    b))
 
 (define (bricks-do-input b pos)
-  (bricks-do-palette
+  (bricks-do-mouse-wheel
    (bricks-do-keys
     (bricks-modify-mouse 
      (lambda (m) pos)
@@ -860,7 +913,7 @@
        (bricks-modify-button 
         (lambda (button) (mouse-button 1))
         ;; keep track of the selection
-        (bricks-update-current b pos))))))))
+        (bricks-update-current b pos)))))) pos))
 
 (define (bricks-drag-start? b new-b)
   (and (not (list? (bricks-current b)))
@@ -967,7 +1020,10 @@
           (with-primitive 
            (brick-id (bricks-current b))
            (when (and (mouse-button 1) (bricks-button b))
-                 (translate (vsub pos (bricks-mouse b))))))
+                 (translate (vdiv
+                             (vsub pos (bricks-mouse b))
+                             (* (brick-get-scale (bricks-current b))
+                                lag-fudge))))))
 
     ; update the input stuff
     (bricks-do-typing
@@ -991,11 +1047,9 @@
            ;; collapse the verts as we want to hide, but want to 
            ;; keep the children visible
            (with-primitive (brick-id palette)
-                           (pdata-map! (lambda (p) (vector 0 0 0)) "p")
-                           (pdata-copy "p" "pref"))
+                           (hint-none))
            (with-primitive (brick-depth palette)
-                           (pdata-map! (lambda (p) (vector 0 0 0)) "p")
-                           (pdata-copy "p" "pref"))
+                           (hint-none))
            (brick-for-each
             (lambda (c)
               (brick-transparent! c))
