@@ -24,23 +24,22 @@
 (require fluxus-018/fluxa)
 (searchpath "/home/dave/noiz/nm/")
 (reload)
+(define drop-fudge 0)
+(define lag-fudge 0.7)
 
-(define palette
-  '(
-   (define (z time a)
-     (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
-     (in time 0.1 z (+ a 1))
-     )
-   (define) 
-   z time a () (play-now)
-   (if (< a 10))
-   (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
-   (in (time-now) 0.1 z 0)
-   0.1 1 2 3 (+ (+ 1 2) 3)
-   ))
+(define palette '(
+                  () (play-now) (seq) (lambda) time clock sync-tempo
+                  a 0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
+                  (white) (pink) (sample) (adsr 0 0.1 0 0) (mooglp)
+                  (mooghp) (moogbp) (rndf) (note) (random 100)
+                  (when (zmod clock 4)) 
+                  (modulo clock 8)
+                  (pick (list 0.1 0.2) clock)
+                  (define (z time a) (in time 0.1 z (+ a 1)))
+                  (in (time-now) 0.1 z 0)
+                  (when (and (< (modulo clock 34) 3) (zmod clock 2)))
+                  ))
    
-(clear)
-
 (define (_println l)
   (map
    (lambda (a)
@@ -80,8 +79,41 @@
     ((symbol? code) 
      (symbol->string code))))
 
-(define drop-fudge 0)
-(define lag-fudge 0.7)
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+; maths hacks, move to fluxa
+
+(define (all-numbers? l)
+  (cond
+   ((null? l) #t)
+   ((not (number? (car l))) #f)
+   (else (all-numbers? (cdr l)))))
+
+(define (+ . args)
+  (if (all-numbers? args)
+      (apply + args)
+      (proc-list add args)))
+
+(define (- . args)
+  (if (all-numbers? args)
+      (apply - args)
+      (proc-list sub args)))
+
+(define (/ . args)
+  (if (all-numbers? args)
+      (apply / args)
+      (proc-list div args)))
+
+(define (* . args)
+  (if (all-numbers? args)
+      (apply * args)
+      (proc-list mul args)))
+
+(define (proc-list p l)
+  (cond
+   ((eq? (length l) 1) (car l))
+   ((eq? (length l) 2) (p (car l) (cadr l)))
+   (else (p (car l) (proc-list p (cdr l))))))
+
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -179,7 +211,7 @@
      (apply-transform)
      (pdata-copy "p" "pref"))
   
-    (let ((depth -1))
+    (let ((depth -3))
           
 
     (with-primitive 
@@ -388,14 +420,14 @@
        #f
        (brick-children b))))
 
-(define (brick-transparent! b)
+(define (brick-transparent! b a)
   (with-primitive 
    (brick-id b)
-   (opacity 0.2)
+   (opacity a)
    (hint-nozwrite))
   (with-primitive 
    (brick-depth b)
-   (opacity 0.2)
+   (opacity a)
    (hint-nozwrite)))
 
 (define (brick-opaque! b)
@@ -719,7 +751,7 @@
         (tx (with-primitive (brick-id brick) (get-global-transform))))
     (brick-for-each 
      (lambda (brick)
-       (brick-transparent! brick)) ;; make transparent as we are dragging
+       (brick-transparent! brick 0.2)) ;; make transparent as we are dragging
      copy)
     (with-primitive (brick-id copy) (identity) (concat tx)) 
     (bricks-modify-current 
@@ -860,10 +892,10 @@
      (cond 
       ((bricks-mouse-down b) 
        (let ((c (bricks-get-over b pos)))
-         (when c
+         (when (and c (not (brick-parent-locked c)))
                (brick-for-each
                 (lambda (c)
-                  (brick-transparent! c))
+                  (brick-transparent! c 0.2))
                 c))
          c))
       ((bricks-mouse-up b) 
@@ -1034,6 +1066,9 @@
 
 ;---------------------------------------------------------  
 
+(clear)
+;(hint-depth-sort)
+
 (set-camera-transform (mtranslate (vector 0 0 -30)))
 
 (define b
@@ -1047,12 +1082,19 @@
            ;; collapse the verts as we want to hide, but want to 
            ;; keep the children visible
            (with-primitive (brick-id palette)
+                           (translate (vector 25 10 0))
+                           (scale 0.5)
                            (hint-none))
            (with-primitive (brick-depth palette)
                            (hint-none))
            (brick-for-each
             (lambda (c)
-              (brick-transparent! c))
+              (with-primitive 
+               (brick-id c)
+               (opacity 0.8))
+              (with-primitive 
+               (brick-depth c)
+               (opacity 0.8)))
             palette)
            (brick-modify-locked 
             (lambda (l) #t) 
@@ -1064,17 +1106,9 @@
          b
          (brick-id (bricks-palette b))))
 
-(define (setup b loc)
-  (with-primitive 
-   (brick-id b)
-   (translate loc))
-  (brick-update! b 0))
-
-(setup (car (bricks-roots b)) (vector 20 10 0))
-
 (define pointer (with-state (scale 0.1) (build-cube)))
 
-(clear-colour (vector 0.5 0.2 0.1))
+;(clear-colour (vector 0.5 0.2 0.1))
 (define t (with-state 
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
