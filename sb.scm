@@ -1,9 +1,7 @@
 ;; [ Copyright (C) 2012 Dave Griffiths : GPLv3 see LICENCE ]
 
 ;; todo:
-;; * middle click code select
-;; * palette move with mouse wheel
-;; * lock pallete items from drag/drop (lock all recusively?)
+;; * show/hide palette
 ;; * rotate/hide block
 ;; * play flash insertion
 ;; * execute flash block
@@ -12,6 +10,9 @@
 ;; * auto record edits
 ;; * copy/paste
 
+;; * middle click code select
+;; * palette move with mouse wheel
+;; * lock pallete items from drag/drop (lock all recusively?)
 ;; * drop messed up from bottom
 ;; * right click text edit
 
@@ -22,6 +23,20 @@
 (searchpath "/home/dave/noiz/nm/")
 (reload)
 
+(define palette
+  '(
+   (define (z time a)
+     (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
+     (in time 0.1 z (+ a 1))
+     )
+   (define) 
+   z time a () (play-now)
+   (if (< a 10))
+   (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
+   (in (time-now) 0.1 z 0)
+   0.1 1 2 3 (+ (+ 1 2) 3)
+   ))
+   
 (clear)
 
 (define (_println l)
@@ -98,7 +113,7 @@
        (with-state
         (parent p)
         (translate (vector -24 18 5))
-        (scale 2)
+        (scale 1)
         (hint-unlit)
         (hint-depth-sort)
         (texture-params 0 (list 'min 'linear 'mag 'linear))
@@ -141,7 +156,6 @@
                         text-prim))))
     (with-primitive 
      prim
-     (hint-unlit)
      ;;(hint-none)(hint-wire)
      (cond 
       (atom
@@ -158,6 +172,7 @@
        (pdata-set! "p" 5 (vector -1 -1 0))
        (pdata-set! "p" 6 (vector 5 0 0))
        (pdata-set! "p" 7 (vector 5 -1 0))))                      
+     (pdata-map! (lambda (n) (vector 0 0 1)) "n")
      (apply-transform)
      (pdata-copy "p" "pref"))
   
@@ -280,7 +295,7 @@
    
    (pdata-copy "p" "pref"))
 
-  (list text children empty-ghost prim text-prim depth-shape-prim #f)))
+  (list text children empty-ghost prim text-prim depth-shape-prim #f #f)))
 
 (define (brick-text b) (list-ref b 0))
 (define (brick-modify-text f b) (list-replace b 0 (f (brick-text b))))
@@ -299,6 +314,9 @@
 (define (brick-depth b) (list-ref b 5))
 (define (brick-locked b) (list-ref b 6)) ; for the palette
 (define (brick-modify-locked f b) (list-replace b 6 (f (brick-locked b))))
+;; set manually when creating the palette
+(define (brick-parent-locked b) (list-ref b 7))
+(define (brick-modify-parent-locked f b) (list-replace b 7 (f (brick-parent-locked b))))
 
 (define (brick-for-each fn b)
   (fn b)
@@ -307,7 +325,18 @@
          (lambda (c)
            (brick-for-each fn c))
          (brick-children b))))
-  
+
+(define (brick-modify-all-children fn b)
+  (if (brick-is-atom? b)
+      (fn b)
+      (brick-modify-children 
+       (lambda (children)
+         (map
+          (lambda (child) 
+            (brick-modify-all-children fn child))
+          children))
+       (fn b))))
+
 (define (brick-modify-brick fn b id)
   ;; check ourself first
   (if (eq? (brick-id b) id) 
@@ -352,6 +381,39 @@
              r))
        #f
        (brick-children b))))
+
+(define (brick-transparent! b)
+  (with-primitive 
+   (brick-id b)
+   (opacity 0.2)
+   (hint-nozwrite))
+  (with-primitive 
+   (brick-depth b)
+   (opacity 0.2)
+   (hint-nozwrite)))
+
+(define (brick-opaque! b)
+  (with-primitive 
+   (brick-id b)
+   (opacity 1)
+   (hint-none)(hint-solid))
+  (with-primitive 
+   (brick-depth b)
+   (opacity 1)
+   (hint-none)(hint-solid)))
+
+(define (brick-text-glow! p)
+  (with-primitive 
+   p
+   (colour (+ 0.5 (fmod (* 4 (flxtime)) 0.5)))))
+
+(define (brick-code-glow! p)
+  (with-primitive 
+   p
+   (colour (vmix 
+            (vector 1 0 0) 
+            (vector 1 1 0) 
+            (abs (sin (* (flxtime) 2)))))))
 
 (define (brick-expand! b n)
   (with-primitive 
@@ -459,7 +521,8 @@
    b))
 
 (define (brick-dock b new)
-  (cond ((brick-locked b) b)
+  (cond ((or (brick-parent-locked b) 
+             (brick-locked b)) b)
         (else
          (with-primitive 
           (brick-id new)
@@ -471,7 +534,8 @@
           (brick-clear-ghost b)))))
 
 (define (brick-undock b id)
-  (cond ((brick-locked b) b)
+  (cond ((or (brick-locked b)
+             (brick-parent-locked b)) b)
         (else
          (with-primitive id (detach-parent))
          (brick-modify-children
@@ -587,10 +651,13 @@
       roots))
    b))
 
+(define (bricks-palette b) (car (bricks-roots b)))
+
 (define (bricks-add-root b root)
   (bricks-modify-roots
    (lambda (roots)
-     (cons root roots))
+     ;; add to end so palette is always first element
+     (append roots (list root)))
    b))
 
 (define (bricks-remove-root b id)
@@ -617,6 +684,10 @@
   (let ((copy (code->brick (brick->code brick)))
         ;; copy the transform
         (tx (with-primitive (brick-id brick) (get-global-transform))))
+    (brick-for-each 
+     (lambda (brick)
+       (brick-transparent! brick)) ;; make transparent as we are dragging
+     copy)
     (with-primitive (brick-id copy) (identity) (concat tx)) 
     (bricks-modify-current 
      (lambda (c) copy) 
@@ -664,6 +735,7 @@
    keys))
 
 (define (bricks-type-into b bx keys-pressed)
+  ;; modify the brick text based on the keys pressed
   (foldl
    (lambda (key r)
      (if (char? key)             
@@ -706,83 +778,90 @@
              b)
             b)
         (brick-id (bricks-typing-current b))))
-      ;; do execute key
-      ((bricks-key-pressed? b "x") 
-       (broadcast 1 (bricks->text b))
-       (eval-string (bricks->text b)
+      ;; do execute key if we have a code selection
+      ((and (in-list? #\x keys-pressed)   
+            (bricks-code-current b))
+       (broadcast 1 (brick->text (bricks-code-current b)))
+       (eval-string (brick->text (bricks-code-current b))
                     (lambda (error)
                       (broadcast 5 (exn-message error))))
        b)
       (else b)))))
 
-(define (bricks-do-input b pos)
-  (bricks-do-keys
-   (bricks-modify-mouse 
-    (lambda (m) pos)
-    (bricks-modify-typing
-     (lambda (t) (mouse-button 3))
-     (bricks-modify-button 
-      (lambda (button) (mouse-button 1))
-      ;; keep track of the selection
-      (bricks-modify-current
-       (lambda (current)
-         (cond 
-          ((bricks-mouse-down b) 
-           (let ((c (bricks-get-over b pos)))
+(define (bricks-do-dragging b pos)
+  ;; find what is underneath
+  (let* ((temp (bricks-get-over b pos))
+         (over (if (and temp (brick-is-atom? temp)) #f temp))
+         (old-over (bricks-drop-over b)))
+    (bricks-modify-drop-over
+     (lambda (dropover) over)
+     (if (and over (not (brick-parent-locked over)))
+         ;; update the ghost position
+         (bricks-modify-brick
+          (lambda (over)
+            (brick-update-ghost over pos (brick-size (bricks-current b))))
+          (if old-over
+              ;; update the ghost for the old over brick
+              (bricks-modify-brick
+               (lambda (over)
+                 (brick-clear-ghost over))
+               b
+               (brick-id old-over))
+              b)
+          (brick-id over))
+         b))))
+
+(define (bricks-update-current b pos)
+  (bricks-modify-current
+   (lambda (current)
+     (cond 
+      ((bricks-mouse-down b) 
+       (let ((c (bricks-get-over b pos)))
+         (when c
+               (brick-for-each
+                (lambda (c)
+                  (brick-transparent! c))
+                c))
+         c))
+      ((bricks-mouse-up b) 
+       (when current
              (brick-for-each
               (lambda (c)
-                (with-primitive 
-                 (brick-id c)
-                 (opacity 0.2)
-                 (hint-nozwrite))
-                (with-primitive 
-                 (brick-depth c)
-                 (opacity 0.2)
-                 (hint-nozwrite)))
-              c)
-             c))
-          ((bricks-mouse-up b) 
-           (brick-for-each
-            (lambda (c)
-              (with-primitive 
-               (brick-id c)
-               (opacity 1)
-               (hint-none)(hint-unlit)(hint-solid))
-              (with-primitive 
-               (brick-depth c)
-              (opacity 1)
-              (hint-none)(hint-unlit)(hint-solid)))
-            current)
-           #f)
-          (else current)))
-       ;; if we are dragging something 
-       (if (bricks-current b)
-           ;; find what is underneath
-           (let* ((temp (bricks-get-over b pos))
-                  (over (if (and temp (brick-is-atom? temp)) #f temp))
-                  (old-over (bricks-drop-over b)))
-             (when (and over old-over (not (eq? (brick-id over) 
-                                                (brick-id old-over)))) 
-                   (println "modifying drop-over"))
-             (bricks-modify-drop-over
-              (lambda (dropover) over)
-              (if over
-                  ;; update the ghost position
-                  (bricks-modify-brick
-                   (lambda (over)
-                     (brick-update-ghost over pos (brick-size (bricks-current b))))
-                   (if old-over
-                       ;; update the ghost for the old over brick
-                       (bricks-modify-brick
-                        (lambda (over)
-                          (brick-clear-ghost over))
-                        b
-                        (brick-id old-over))
-                       b)
-                   (brick-id over))
-                  b)))
-           b)))))))
-  
+                (brick-opaque! c))
+              current))
+       #f)
+      (else current)))
+   ;; if we are dragging something 
+   (if (bricks-current b)
+       (bricks-do-dragging b pos)
+       b)))
+
+(define (bricks-do-palette b)
+  (with-primitive 
+   (brick-id (bricks-palette b))
+   (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
+         (translate (vector 0 3 0)))
+   (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
+         (translate (vector 0 -3 0))))
+  b)
+
+(define (bricks-do-input b pos)
+  (bricks-do-palette
+   (bricks-do-keys
+    (bricks-modify-mouse 
+     (lambda (m) pos)
+     (bricks-modify-code-current 
+      (lambda (o) 
+        (if (mouse-button 2)
+            (bricks-get-over b pos)
+            o))
+      (bricks-modify-typing
+       (lambda (t) (mouse-button 3))
+       (bricks-modify-button 
+        (lambda (button) (mouse-button 1))
+        ;; keep track of the selection
+        (bricks-update-current b pos))))))))
+
 (define (bricks-drag-start? b new-b)
   (and (not (list? (bricks-current b)))
        (list? (bricks-current new-b))))
@@ -798,14 +877,16 @@
 (define (bricks-do-docking b new-b)
   ;; check for brick to dock
   (if (and (bricks-drag-end? b new-b)
-           (bricks-drop-over new-b))
+           (bricks-drop-over new-b)
+           ;; don't want to dock with the palette (or do we?...)
+           (not (brick-parent-locked (bricks-drop-over new-b))))
       ;; note - assume if drop over exists, then current must also exist
       (let* ((id (brick-id (bricks-current b)))
              (new-parent-id (brick-id (bricks-drop-over new-b))))
         (bricks-remove-root
          (bricks-modify-brick 
           (lambda (new-parent)
-            ;; docks to ghost location
+            ;; docks to the ghost location
             (brick-dock new-parent (bricks-current b)))
           new-b
           new-parent-id)
@@ -818,7 +899,8 @@
       (let* ((id (brick-id (bricks-current new-b)))
              (prnt (bricks-search-for-parent b id)))
         (if prnt ;; can't undock from root
-            (if (brick-locked prnt)
+            (if (or (brick-locked prnt)
+                    (brick-parent-locked prnt))
                 ;; for the pallette... make a copy
                 (bricks-add-spawn new-b (bricks-current new-b))
                 ;; add as new root
@@ -851,13 +933,18 @@
        (lambda (t)
          (bricks-get-over new-b pos))
        new-b)
-      ;; ended typing mode
-      new-b
-      #;(if (and (bricks-typing b)
-               (not (bricks-typing new-b)))
-          (bricks-modify-typing-current
-           (lambda (t) #f) new-b)
-          new-b)))
+      new-b))
+
+(define (bricks-do-glow! b)
+  (let ((tc (bricks-typing-current b)))
+    (when tc
+          (brick-text-glow! (brick-id tc))
+          (brick-text-glow! (brick-depth tc)))
+  
+  (let ((tc (bricks-code-current b)))
+    (when tc
+          (brick-code-glow! (brick-id tc))
+          (brick-code-glow! (brick-depth tc))))))
                 
 (define (bricks-update! b)
   (let* ((pos (vadd (vector 0 drop-fudge 0) (get-point-from-mouse))))
@@ -873,11 +960,7 @@
          (brick-update! b 0))
        (bricks-roots b)))
 
-    (let ((tc (bricks-typing-current b)))
-      (when tc
-          (with-primitive 
-           (brick-id tc)
-           (colour (+ 0.5 (fmod (* 4 (flxtime)) 0.5))))))
+    (bricks-do-glow! b)
 
     ; move the current brick
     (when (list? (bricks-current b))
@@ -897,32 +980,35 @@
 
 (set-camera-transform (mtranslate (vector 0 0 -30)))
 
-;(hint-wire)
-;(hint-box)
-
 (define b
   (bricks-add-code
-   (bricks-add-code 
     (make-bricks) 
-    '(begin (display "hello") (display (+ 1 2 3 4))))
-   '(
-     (define (z time a)
-       (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
-       (in time 0.1 z (+ a 1))
-       )
-     (define) 
-     z time a () (play-now)
-     (if (< a 10))
-     (play (+ time 3) (mul (adsr 0 0.1 0 0) (sine 440)))
-     (in (time-now) 0.1 z 0)
-     0.1 1 2 3 (+ (+ 1 2) 3))))
+   palette))
 
-;; activate pallette
+;; activate palette
 (set! b (bricks-modify-brick
-         (lambda (pallette)
-           (brick-modify-locked (lambda (l) #t) pallette))
+         (lambda (palette)
+           ;; collapse the verts as we want to hide, but want to 
+           ;; keep the children visible
+           (with-primitive (brick-id palette)
+                           (pdata-map! (lambda (p) (vector 0 0 0)) "p")
+                           (pdata-copy "p" "pref"))
+           (with-primitive (brick-depth palette)
+                           (pdata-map! (lambda (p) (vector 0 0 0)) "p")
+                           (pdata-copy "p" "pref"))
+           (brick-for-each
+            (lambda (c)
+              (brick-transparent! c))
+            palette)
+           (brick-modify-locked 
+            (lambda (l) #t) 
+            (brick-modify-all-children
+             (lambda (c)
+               (brick-modify-parent-locked 
+                (lambda (p) #t) c))
+             palette)))
          b
-         (brick-id (car (bricks-roots b)))))
+         (brick-id (bricks-palette b))))
 
 (define (setup b loc)
   (with-primitive 
@@ -931,10 +1017,8 @@
   (brick-update! b 0))
 
 (setup (car (bricks-roots b)) (vector 20 10 0))
-(setup (cadr (bricks-roots b)) (vector 5 10 0))
 
-(define pointer (with-state (scale 0.1) (build-cube)))           
-
+(define pointer (with-state (scale 0.1) (build-cube)))
 
 (clear-colour (vector 0.5 0.2 0.1))
 (define t (with-state 
