@@ -36,7 +36,9 @@
                   (modulo clock 8)
                   (pick (list 0.1 0.2) clock)
                   (define (z time a) (in time 0.1 z (+ a 1)))
-                  (in (time-now) 0.1 z 0)
+                  (define (z time a) (play time (* (adsr 0 0.1 0 0) (saw 220))) (synced-in time z (+ a 1)))
+                  (synced-in (time-now) z 0)
+                  (in (+ (time-now) 1) z 0)
                   (when (and (< (modulo clock 34) 3) (zmod clock 2)))
                   ))
    
@@ -861,6 +863,13 @@
                     (lambda (error)
                       (broadcast 5 (exn-message error))))
        b)
+      ;; do copy when code selection is active
+      ((and (in-list? #\C keys-pressed)   
+            (bricks-code-current b))
+       (bricks-add-root 
+        b 
+        (code->brick 
+         (brick->code (bricks-code-current b)))))
       (else b)))))
 
 (define (bricks-do-dragging b pos)
@@ -1108,7 +1117,7 @@
 
 (define pointer (with-state (scale 0.1) (build-cube)))
 
-;(clear-colour (vector 0.5 0.2 0.1))
+(clear-colour (vector 0.5 0.2 0.1))
 (define t (with-state 
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
