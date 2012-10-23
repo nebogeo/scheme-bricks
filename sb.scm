@@ -3,11 +3,12 @@
 ;; todo:
 ;; * show/hide palette
 ;; * rotate/hide block
-;; * load/save code
-;; * auto record edits
-;; * copy/paste
 ;; * click undock bug 
 
+
+;; * auto record edits
+;; * load/save code
+;; * copy/paste
 ;; * drag resized distance
 ;; * resize block
 ;; * execute flash block
@@ -366,6 +367,12 @@
            (brick-for-each fn c))
          (brick-children b))))
 
+(define (brick-destroy! b)
+  (brick-for-each
+   (lambda (b)
+     (destroy (brick-id b)))
+   b))
+
 (define (brick-modify-all-children fn b)
   (if (brick-is-atom? b)
       (fn b)
@@ -465,18 +472,19 @@
             (vector-ref tx 11))))))
 
 (define (brick-expand! b n)
-  (with-primitive 
-   (brick-id b)
-   (for ((i (in-range 4 8)))
-        (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))
-  (with-primitive 
-   (brick-depth b)
-   (for-each (lambda (i)
-               (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))
-             (list 14 15))
-   (for ((i (in-range 18 32)))
-        (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))))
-
+  (when (not (brick-locked b))
+        (with-primitive 
+         (brick-id b)
+         (for ((i (in-range 4 8)))
+              (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))
+        (with-primitive 
+         (brick-depth b)
+         (for-each (lambda (i)
+                     (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))
+                   (list 14 15))
+         (for ((i (in-range 18 32)))
+              (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))))
+  
 (define (brick-children-size b)
   (if (not (brick-is-atom? b))
       (foldl
@@ -684,10 +692,30 @@
          (if (bb/point-intersect? pos 0.1) b #f))
         hit)))
 
+(define (brick-intersect-no-atoms b pos)
+  (if (not (brick-is-atom? b))
+      (let ((hit (foldl
+                  (lambda (child r)
+                    (if (not r) (brick-intersect-no-atoms child pos) r))
+                  #f
+                  (brick-children b))))
+        (if (not hit)
+            (with-primitive 
+             (brick-id b)
+             (recalc-bb)
+             (if (bb/point-intersect? pos 0.1) b #f))
+            hit))
+      #f))
+
 ;---------------------------------------------------------  
 
 (define (make-bricks)
-  (list '() (vector 0 0 0) #f #f #f #f #f '() #f))
+  (list '() (vector 0 0 0) #f #f #f #f #f '() #f
+        (let* ((p (open-input-file "history/persist.scm"))
+               (r (read p)))
+          (println "history level is: " r)
+          (close-input-port p)
+          r)))
 
 (define (bricks-roots b) (list-ref b 0))
 (define (bricks-modify-roots f b) (list-replace b 0 (f (bricks-roots b))))
@@ -707,6 +735,64 @@
 (define (bricks-modify-keys f b) (list-replace b 7 (f (bricks-keys b))))
 (define (bricks-code-current b) (list-ref b 8))
 (define (bricks-modify-code-current f b) (list-replace b 8 (f (bricks-code-current b))))
+(define (bricks-history b) (list-ref b 9))
+(define (bricks-modify-history f b) (list-replace b 9 (f (bricks-history b))))
+
+(define (bricks-save b fn)
+  (let ((f (open-output-file fn #:exists 'replace)))
+    (write 
+     (map 
+      (lambda (root)
+        (list
+         (with-primitive (brick-id root) (get-global-transform))
+         (brick->text root #f)))
+      (filter (lambda (root) (not (brick-locked root))) (bricks-roots b)))
+     f)
+    (close-output-port f)))
+
+(define (bricks-load b fn)
+  (let* ((f (open-input-file fn))
+         (ret (foldl 
+               (lambda (e b)
+                 (println (cadr e))
+                 (let ((brick (code->brick (eval-string (string-append "'" (cadr e))))))
+                   (with-primitive 
+                    (brick-id brick) 
+                    (concat (car e)))
+                   (bricks-add-root b brick)))
+               b
+               (read f))))
+    (close-input-port f)
+    ret))
+
+(define (get-max-history)
+  (let* ((f (open-input-file "history/persist.scm"))
+         (max (read f)))
+    (close-input-port f)
+    max))
+
+(define (increase-history!)
+  (let* ((h (get-max-history))
+         (f (open-output-file "history/persist.scm" #:exists 'replace)))
+    (write (+ h 1) f)
+    (close-output-port f)
+    (+ h 1)))
+  
+(define (bricks-load-history b)
+  (bricks-load 
+   (bricks-clear b) 
+   (string-append 
+    "history/" 
+    (number->string (bricks-history b)) 
+    ".scm")))
+
+(define (bricks-save-history! b)
+  (bricks-save 
+   b 
+   (string-append 
+    "history/" 
+    (number->string (increase-history!)) 
+    ".scm")))
 
 (define (bricks-modify-brick fn b id)
   (bricks-modify-roots
@@ -732,6 +818,20 @@
      (filter (lambda (root) (not (eq? id (brick-id root)))) roots))
    b))
 
+(define (bricks-clear b)
+  (for-each 
+   (lambda (root)
+     (when (not (brick-locked root))
+           (brick-destroy! root)))
+   (bricks-roots b))
+  (bricks-modify-roots 
+   (lambda (r) (list (car r))) 
+   (bricks-modify-code-current
+    (lambda (c) #f)
+    (bricks-modify-typing-current
+     (lambda (t) #f)
+     b)))) 
+
 (define (bricks->text b)
   (apply
    string-append
@@ -755,7 +855,7 @@
      (lambda (brick)
        (brick-transparent! brick 0.2)) ;; make transparent as we are dragging
      copy)
-    (with-primitive (brick-id copy) (identity) (concat tx)) 
+    (with-primitive (brick-id copy) (identity) (concat tx) (scale 2)) 
     (bricks-modify-current 
      (lambda (c) copy) 
      (bricks-add-root b copy))))
@@ -773,6 +873,20 @@
            ;; what we are dragging is not this
            (not (eq? (brick-id brick) (brick-id (bricks-current b))))))
          (brick-intersect brick pos)
+         r))
+   #f
+   (bricks-roots b)))
+
+(define (bricks-get-over-no-atoms b pos)
+  (foldl
+   (lambda (brick r)
+     (if (and 
+          (not r) ;; not found anything yet
+          (or
+           (not (bricks-current b)) ;; not dragging anything     
+           ;; what we are dragging is not this
+           (not (eq? (brick-id brick) (brick-id (bricks-current b))))))
+         (brick-intersect-no-atoms brick pos)
          r))
    #f
    (bricks-roots b)))
@@ -833,7 +947,7 @@
    bx
    keys-pressed))
 
-(define (bricks-do-keys b)
+(define (bricks-do-keys b pos)
   ;; get keys pressed since last update
   (let ((keys-pressed
          (filter
@@ -858,6 +972,7 @@
       ;; do execute key if we have a code selection
       ((and (in-list? #\x keys-pressed)   
             (bricks-code-current b))
+       (bricks-save-history! b)
        (broadcast 1 (brick->text (bricks-code-current b) #t))
        (eval-string (brick->text (bricks-code-current b) #t)
                     (lambda (error)
@@ -870,11 +985,36 @@
         b 
         (code->brick 
          (brick->code (bricks-code-current b)))))
+      ;; keyboard alt for middle mouse (h)
+      ((in-list? #\h keys-pressed)
+       (bricks-modify-code-current 
+        (lambda (o) 
+          (bricks-get-over b pos)) b))
+      ;; o saves
+      ((in-list? #\o keys-pressed)
+       (bricks-save b "test.scm")
+       b)
+      ((in-list? #\p keys-pressed)
+       (bricks-load b "test.scm"))
+
+      ((in-list? #\, keys-pressed)
+       (bricks-load-history
+        (bricks-modify-history 
+         (lambda (h) (max 1 (- h 1))) b)))
+
+      ((in-list? #\. keys-pressed)
+       (let* ((f (open-input-file "history/persist.scm"))
+              (max (read f)))
+         (close-input-port f)
+         (bricks-load-history
+          (bricks-modify-history 
+           (lambda (h) (min max (+ h 1))) b))))
+
       (else b)))))
 
 (define (bricks-do-dragging b pos)
   ;; find what is underneath
-  (let* ((temp (bricks-get-over b pos))
+  (let* ((temp (bricks-get-over-no-atoms b pos))
          (over (if (and temp (brick-is-atom? temp)) #f temp))
          (old-over (bricks-drop-over b)))
     (bricks-modify-drop-over
@@ -954,7 +1094,7 @@
        (bricks-modify-button 
         (lambda (button) (mouse-button 1))
         ;; keep track of the selection
-        (bricks-update-current b pos)))))) pos))
+        (bricks-update-current b pos))))) pos) pos))
 
 (define (bricks-drag-start? b new-b)
   (and (not (list? (bricks-current b)))
@@ -1117,7 +1257,7 @@
 
 (define pointer (with-state (scale 0.1) (build-cube)))
 
-(clear-colour (vector 0.5 0.2 0.1))
+;(clear-colour (vector 0.5 0.2 0.1))
 (define t (with-state 
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
