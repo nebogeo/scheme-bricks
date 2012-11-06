@@ -23,23 +23,31 @@
 (require mzlib/string)
 
 (require fluxus-018/fluxa)
-(searchpath "/home/dave/noiz/nm/")
-(reload)
 (define drop-fudge 0)
 (define lag-fudge 0.7)
+(define drag-transparent 0.75)
+
+(define (reset) 
+  (clear-pings!)
+  (searchpath "/home/dave/noiz/nm/")
+  (reload))
+
+(reset)
 
 (define palette '(
-                  () (play-now) (seq) (lambda) time clock sync-tempo
-                  a 0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
+                  () (play-now) (seq) (lambda) (reset) time clock sync-tempo
+                  0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
                   (white) (pink) (sample) (adsr 0 0.1 0 0) (mooglp)
                   (mooghp) (moogbp) (rndf) (note) (random 100)
                   (when (zmod clock 4)) 
                   (modulo clock 8)
                   (pick (list 0.1 0.2) clock)
-                  (define (z time a) (in time 0.1 z (+ a 1)))
-                  (define (z time a) (play time (* (adsr 0 0.1 0 0) (saw 220))) (synced-in time z (+ a 1)))
-                  (synced-in (time-now) z 0)
-                  (in (+ (time-now) 1) z 0)
+                  (cond ((zero? (modulo clock 4) )(else )))
+                  (cond ((< clock 4)))
+                  (define (zop time clock) (in time 0.5 zop (+ clock 1)))
+                  (define (zap time clock) (synced-in time zap (+ clock 1)))
+                  (synced-in (time-now) zap 0)
+                  (in (+ (time-now) 1) 0.5 zop 0)
                   (when (and (< (modulo clock 34) 3) (zmod clock 2)))
                   ))
    
@@ -472,19 +480,18 @@
             (vector-ref tx 11))))))
 
 (define (brick-expand! b n)
-  (when (not (brick-locked b))
-        (with-primitive 
-         (brick-id b)
-         (for ((i (in-range 4 8)))
-              (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))
-        (with-primitive 
-         (brick-depth b)
-         (for-each (lambda (i)
-                     (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))
-                   (list 14 15))
-         (for ((i (in-range 18 32)))
-              (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))))
-  
+  (with-primitive 
+   (brick-id b)
+   (for ((i (in-range 4 8)))
+        (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))
+  (with-primitive 
+   (brick-depth b)
+   (for-each (lambda (i)
+               (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))
+             (list 14 15))
+   (for ((i (in-range 18 32)))
+        (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))))
+
 (define (brick-children-size b)
   (if (not (brick-is-atom? b))
       (foldl
@@ -803,6 +810,24 @@
       roots))
    b))
 
+(define (bricks-delete b brick)
+  (let* ((id (brick-id brick))
+         (parent (bricks-search-for-parent b id))
+         (new-b (if parent 
+                    (bricks-modify-brick 
+                     (lambda (parent)
+                       (brick-undock parent id))
+                     b (brick-id parent))
+                    (bricks-modify-roots
+                     (lambda (roots)
+                       (filter 
+                        (lambda (r)
+                          (not (eq? (brick-id r) id)))
+                        roots))
+                     b))))
+    (brick-destroy! brick) ;; destroy after potentially undocking
+    new-b))
+
 (define (bricks-palette b) (car (bricks-roots b)))
 
 (define (bricks-add-root b root)
@@ -853,7 +878,7 @@
         (tx (with-primitive (brick-id brick) (get-global-transform))))
     (brick-for-each 
      (lambda (brick)
-       (brick-transparent! brick 0.2)) ;; make transparent as we are dragging
+       (brick-transparent! brick drag-transparent)) ;; make transparent as we are dragging
      copy)
     (with-primitive (brick-id copy) (identity) (concat tx) (scale 2)) 
     (bricks-modify-current 
@@ -888,6 +913,14 @@
            (not (eq? (brick-id brick) (brick-id (bricks-current b))))))
          (brick-intersect-no-atoms brick pos)
          r))
+   #f
+   (bricks-roots b)))
+
+;; look for the brick with id
+(define (bricks-search b id)
+  (foldl
+   (lambda (b r)
+     (if (not r) (brick-search b id) r))
    #f
    (bricks-roots b)))
 
@@ -962,34 +995,44 @@
       ((bricks-typing-current b)
        (bricks-modify-brick
         (lambda (bx)
-          (bricks-type-into b bx keys-pressed))
+          ;; don't put returns into the code text...
+          (if (not (keys-contains-enter? keys-pressed))
+              (bricks-type-into b bx keys-pressed)
+              bx))
         (if (keys-contains-enter? keys-pressed)
             (bricks-modify-typing-current 
              (lambda (t) #f)
              b)
             b)
         (brick-id (bricks-typing-current b))))
+
       ;; do execute key if we have a code selection
       ((and (in-list? #\x keys-pressed)   
             (bricks-code-current b))
-       (bricks-save-history! b)
-       (broadcast 1 (brick->text (bricks-code-current b) #t))
-       (eval-string (brick->text (bricks-code-current b) #t)
-                    (lambda (error)
-                      (broadcast 5 (exn-message error))))
-       b)
+       (let ((current (bricks-search b (bricks-code-current b))))
+         (bricks-save-history! b)
+         (broadcast 1 (brick->text current #t))
+         (eval-string (brick->text current #t)
+                      (lambda (error)
+                        (broadcast 5 (exn-message error))))
+         b))
+
       ;; do copy when code selection is active
       ((and (in-list? #\C keys-pressed)   
             (bricks-code-current b))
        (bricks-add-root 
         b 
         (code->brick 
-         (brick->code (bricks-code-current b)))))
+         (brick->code (bricks-search b (bricks-code-current b))))))
+
       ;; keyboard alt for middle mouse (h)
       ((in-list? #\h keys-pressed)
        (bricks-modify-code-current 
-        (lambda (o) 
-          (bricks-get-over b pos)) b))
+        (lambda (o)
+          (let ((brick (bricks-get-over b pos)))
+            (if brick (brick-id brick) #f))) 
+        b))
+
       ;; o saves
       ((in-list? #\o keys-pressed)
        (bricks-save b "test.scm")
@@ -997,11 +1040,13 @@
       ((in-list? #\p keys-pressed)
        (bricks-load b "test.scm"))
 
+      ;; history navigation, backwards
       ((in-list? #\, keys-pressed)
        (bricks-load-history
         (bricks-modify-history 
          (lambda (h) (max 1 (- h 1))) b)))
-
+      
+      ;; history navigation, forwards
       ((in-list? #\. keys-pressed)
        (let* ((f (open-input-file "history/persist.scm"))
               (max (read f)))
@@ -1009,6 +1054,11 @@
          (bricks-load-history
           (bricks-modify-history 
            (lambda (h) (min max (+ h 1))) b))))
+
+      ((in-list? #\P keys-pressed)
+       (let ((brick (bricks-get-over b pos)))
+         (if brick (bricks-delete b brick)
+             b)))
 
       (else b)))))
 
@@ -1044,7 +1094,7 @@
          (when (and c (not (brick-parent-locked c)))
                (brick-for-each
                 (lambda (c)
-                  (brick-transparent! c 0.2))
+                  (brick-transparent! c drag-transparent))
                 c))
          c))
       ((bricks-mouse-up b) 
@@ -1068,9 +1118,9 @@
                 (with-primitive 
                  (brick-id root)
                  (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
-                       (translate (vector 0 3 0)))
+                       (translate (vector 0 6 0)))
                  (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
-                       (translate (vector 0 -3 0))))
+                       (translate (vector 0 -6 0))))
                 (with-primitive  ;; it's a normal brick, scale
                  (brick-id root)
                  (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
@@ -1087,7 +1137,8 @@
      (bricks-modify-code-current 
       (lambda (o) 
         (if (mouse-button 2)
-            (bricks-get-over b pos)
+            (let ((brick (bricks-get-over b pos)))
+              (if brick (brick-id brick) #f))
             o))
       (bricks-modify-typing
        (lambda (t) (mouse-button 3))
@@ -1177,8 +1228,8 @@
   
   (let ((tc (bricks-code-current b)))
     (when tc
-          (brick-code-glow! (brick-id tc))
-          (brick-code-glow! (brick-depth tc))))))
+          (brick-code-glow! tc)
+          #;(brick-code-glow! (brick-depth tc))))))
                 
 (define (bricks-update! b)
   (let* ((pos (vadd (vector 0 drop-fudge 0) (get-point-from-mouse))))
@@ -1228,14 +1279,6 @@
 ;; activate palette
 (set! b (bricks-modify-brick
          (lambda (palette)
-           ;; collapse the verts as we want to hide, but want to 
-           ;; keep the children visible
-           (with-primitive (brick-id palette)
-                           (translate (vector 25 10 0))
-                           (scale 0.5)
-                           (hint-none))
-           (with-primitive (brick-depth palette)
-                           (hint-none))
            (brick-for-each
             (lambda (c)
               (with-primitive 
@@ -1245,6 +1288,16 @@
                (brick-depth c)
                (opacity 0.8)))
             palette)
+           ;; collapse the verts as we want to hide, but want to 
+           ;; keep the children visible
+           (with-primitive (brick-id palette)
+                           (translate (vector 25 10 0))
+                           (scale 0.5)
+                           (opacity 0)
+                           (hint-nozwrite))
+           (with-primitive (brick-depth palette)
+                           (opacity 0)
+                           (hint-nozwrite))
            (brick-modify-locked 
             (lambda (l) #t) 
             (brick-modify-all-children
