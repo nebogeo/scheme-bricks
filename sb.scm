@@ -27,6 +27,10 @@
 (define lag-fudge 0.7)
 (define drag-transparent 0.75)
 
+(set-global-offset 0.12)
+
+(define sound-check #f)
+
 (define (reset) 
   (clear-pings!)
   (searchpath "/home/dave/noiz/nm/")
@@ -42,12 +46,14 @@
                   (when (zmod clock 4)) 
                   (modulo clock 8)
                   (pick (list 0.1 0.2) clock)
-                  (cond ((zero? (modulo clock 4) )(else )))
+                  (cond ((zmod clock 4) )(else ))
+                  (define (zop time clock))
                   (cond ((< clock 4)))
-                  (define (zop time clock) (in time 0.5 zop (+ clock 1)))
-                  (define (zap time clock) (synced-in time zap (+ clock 1)))
-                  (synced-in (time-now) zap 0)
-                  (in (+ (time-now) 1) 0.5 zop 0)
+                  (in time 0.5 zop (+ clock 1))
+                  (if (even? clock) 0.25 0.5)
+                  (if (< clock 6) 0.25 0.5)
+                  (define (root time clock) (synced-in time root (+ clock 1)))
+                  (synced-in (time-now) root 0)
                   (when (and (< (modulo clock 34) 3) (zmod clock 2)))
                   ))
    
@@ -441,11 +447,13 @@
   (with-primitive 
    (brick-id b)
    (opacity a)
-   (hint-nozwrite))
+   ;(hint-nozwrite)
+   )
   (with-primitive 
    (brick-depth b)
    (opacity a)
-   (hint-nozwrite)))
+   ;(hint-nozwrite)
+   ))
 
 (define (brick-opaque! b)
   (with-primitive 
@@ -1123,10 +1131,18 @@
                        (translate (vector 0 -6 0))))
                 (with-primitive  ;; it's a normal brick, scale
                  (brick-id root)
-                 (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
-                       (scale (vector 0.9 0.9 0.9)))
-                 (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
-                       (scale (vector 1.1 1.1 1.1)))))))
+                 (let* ((t (get-transform))
+                        (d (vsub pos (vtransform (vector 0 0 0) (get-transform))))
+                        (d2 (vmul d (/ 1 (vector-ref (get-transform) 0)))))
+                   (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
+                         (translate d2)
+                         (scale (vector 0.9 0.9 0.9))
+                         (translate (vmul d2 -1)))
+                   (when (or (> (mouse-wheel) 0) (key-special-pressed 101))
+                         (translate d2)
+                         (scale (vector 1.1 1.1 1.1))
+                         (translate (vmul d2 -1))
+                         ))))))
     b))
 
 (define (bricks-do-input b pos)
@@ -1292,7 +1308,7 @@
            ;; keep the children visible
            (with-primitive (brick-id palette)
                            (translate (vector 25 10 0))
-                           (scale 0.5)
+                           (scale 0.7)
                            (opacity 0)
                            (hint-nozwrite))
            (with-primitive (brick-depth palette)
@@ -1315,6 +1331,8 @@
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
            (colour (vector 0 0.5 1)) (build-cube)))
+
+(when sound-check (set! b (bricks-load b "sc.scm"))) 
 
 (every-frame 
  (begin
