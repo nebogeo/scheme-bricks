@@ -3,7 +3,7 @@
 ;; todo:
 ;; * show/hide palette
 ;; * rotate/hide block
-;; * click undock bug 
+;; * click undock bug
 
 
 ;; * auto record edits
@@ -27,14 +27,19 @@
 (define lag-fudge 0.7)
 (define drag-transparent 0.75)
 
-(set-global-offset 0.12)
+(set-global-offset 0)
 
 (define sound-check #f)
+(define sound-fac #f)
 
-(define (reset) 
+(define (reset)
   (clear-pings!)
   (searchpath "/home/dave/noiz/nm/")
-  (reload))
+  (reload)
+  )
+
+(volume 2)
+(eq 1 1 1)
 
 (reset)
 
@@ -43,20 +48,22 @@
                   0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
                   (white) (pink) (sample) (adsr 0 0.1 0 0) (mooglp)
                   (mooghp) (moogbp) (rndf) (note) (random 100)
-                  (when (zmod clock 4)) 
                   (modulo clock 8)
                   (pick (list 0.1 0.2) clock)
-                  (cond ((zmod clock 4) )(else ))
-                  (define (zop time clock))
-                  (cond ((< clock 4)))
-                  (in time 0.5 zop (+ clock 1))
                   (if (even? clock) 0.25 0.5)
-                  (if (< clock 6) 0.25 0.5)
-                  (define (root time clock) (synced-in time root (+ clock 1)))
-                  (synced-in (time-now) root 0)
-                  (when (and (< (modulo clock 34) 3) (zmod clock 2)))
+                  (mass (lambda (f) ) (note (modulo clock 4)) (list 1 2 1.3))
+                  (bootstrap (lambda () zop) 4)
+                  (define (zop time clock zap) (if (modeq? clock 8) 
+                                                   (in time 0.5 zop (+ clock 1) zap) 
+                                                   (in time 0.5 zop (+ clock 1) zap)))
+                  (play time (* (adsr 0 0.1 0.1 1) (sine 100) (sine 400)))
+                  (play time (* (adsr 0 0.1 0 0) (pick (list (sine (* 100 (adsr 0 0.1 0 0))) (white 3)) clock)))
+                  (play time (* (adsr 0 0.1 0 0) (sine (+ 440 (* 440 (sine 100))))))
+                  (play time (mooglp (* (adsr 0 0.1 0 0) (let ((p 100)) (+ (saw p) (saw (* p 2.5))))) (pick (list 0.3 0.2 0.8) clock) 0.1))
+                  (play time (echo (formant (* (adsr 1 2 0.2 1) (saw (+ (* 50 (modulo clock 2) (modulo clock 7)) (* 5 (adsr 0.3 0.6 0 0))))) (pick (list 0 0.3 0.5 1 0.8) clock) 0.1) 0.75 0.6))
+                  (sample (pick (list "ia.wav" "ib.wav" "ic.wav" "id.wav")) 440) 
                   ))
-   
+
 (define (_println l)
   (map
    (lambda (a)
@@ -82,18 +89,18 @@
     (else (cons (car l) (list-replace (cdr l) (- i 1) v)))))
 
 (define (in-list? a l)
-  (cond 
+  (cond
    ((null? l) #f)
    ((eq? (car l) a) #t)
    (else (in-list? a (cdr l)))))
 
 (define (text-from-code code)
-   (cond 
-    ((string? code) 
+   (cond
+    ((string? code)
      (string-append "\"" code "\""))
-    ((number? code) 
+    ((number? code)
      (number->string code))
-    ((symbol? code) 
+    ((symbol? code)
      (symbol->string code))))
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -143,7 +150,7 @@
 
 (define (get-point-from-mouse)
   (let ((line (get-line-from-mouse)))
-    (vlerp (car line) (cadr line) (/ (vz (car line)) 
+    (vlerp (car line) (cadr line) (/ (vz (car line))
                                      (- (vz (car line)) (vz (cadr line)))))))
 
 (define (linebreak txt)
@@ -152,16 +159,16 @@
                         (if (and (char=? ch #\ ) (> (string-length (car r)) 40))
                             (list "" (append (cadr r) (list (car r))))
                             (list (string-append (car r) (string ch))
-                                (cadr r))))                         
+                                (cadr r))))
                     (list "" '())
-                    (string->list txt))))                    
+                    (string->list txt))))
         (append (cadr t) (list (car t)))))
 
 (define (broadcast t error)
    (display error)(newline)
    (let ((error (linebreak error)))
      (let ((p (build-locator)))
-       
+
        (with-state
         (parent p)
         (translate (vector -24 18 5))
@@ -175,11 +182,11 @@
          (lambda (line)
            (let ((pp (build-text line)))
              (translate (vector 0 -1 0))
-             (with-primitive pp             
+             (with-primitive pp
                              (text-params line (/ 16 256) (/ 16 256) 16 0 -0.01 0 15 -20 0.005 0.2))))
          error))
-      
-       (spawn-timed-task (+ (time-now) t) 
+
+       (spawn-timed-task (+ (time-now) t)
                          (lambda () (destroy p))))))
 
 
@@ -202,14 +209,14 @@
                       (texture (load-texture "oolite-font.png"
                                              (list 'generate-mipmaps 0 'mip-level 0)))
                       (let ((text-prim (build-text text)))
-                        (with-primitive 
+                        (with-primitive
                          text-prim
                          (set-text text))
                         text-prim))))
-    (with-primitive 
+    (with-primitive
      prim
      ;;(hint-none)(hint-wire)
-     (cond 
+     (cond
       (atom
        (pdata-set! "p" 0 (vector 5 0 0))
        (pdata-set! "p" 1 (vector 5 1 0))
@@ -223,56 +230,56 @@
        (pdata-set! "p" 4 (vector 0 0 0))
        (pdata-set! "p" 5 (vector -1 -1 0))
        (pdata-set! "p" 6 (vector 5 0 0))
-       (pdata-set! "p" 7 (vector 5 -1 0))))                      
+       (pdata-set! "p" 7 (vector 5 -1 0))))
      (pdata-map! (lambda (n) (vector 0 0 1)) "n")
      (apply-transform)
      (pdata-copy "p" "pref"))
-  
-    (let ((depth -3))
-          
 
-    (with-primitive 
+    (let ((depth -3))
+
+
+    (with-primitive
    depth-shape-prim
    (parent prim)
-   (cond 
+   (cond
     (atom
-     (pdata-set! "p" 0 (vector -1 1 depth)) 
-     (pdata-set! "p" 1 (vector -1 1 0)) 
+     (pdata-set! "p" 0 (vector -1 1 depth))
+     (pdata-set! "p" 1 (vector -1 1 0))
      (pdata-set! "p" 2 (vector 5 1 0))
      (pdata-set! "p" 3 (vector 5 1 depth))
-     
-     (pdata-set! "n" 0 (vector 0 1 0)) 
-     (pdata-set! "n" 1 (vector 0 1 0)) 
+
+     (pdata-set! "n" 0 (vector 0 1 0))
+     (pdata-set! "n" 1 (vector 0 1 0))
      (pdata-set! "n" 2 (vector 0 1 0))
      (pdata-set! "n" 3 (vector 0 1 0))
-     
+
      (pdata-set! "p" 4 (vector 5 1 depth))
      (pdata-set! "p" 5 (vector 5 1 0))
      (pdata-set! "p" 6 (vector 5 0 0))
      (pdata-set! "p" 7 (vector 5 0 depth))
-     
-     (pdata-set! "n" 4 (vector 1 0 0)) 
-     (pdata-set! "n" 5 (vector 1 0 0)) 
+
+     (pdata-set! "n" 4 (vector 1 0 0))
+     (pdata-set! "n" 5 (vector 1 0 0))
      (pdata-set! "n" 6 (vector 1 0 0))
      (pdata-set! "n" 7 (vector 1 0 0))
-     
+
      (pdata-set! "p" 8 (vector 5 0 depth))
      (pdata-set! "p" 9 (vector 5 0 0))
-     (pdata-set! "p" 10 (vector -1 0 0)) 
+     (pdata-set! "p" 10 (vector -1 0 0))
      (pdata-set! "p" 11 (vector -1 0 depth))
-     
-     (pdata-set! "n" 8 (vector 0 -1 0)) 
-     (pdata-set! "n" 9 (vector 0 -1 0)) 
+
+     (pdata-set! "n" 8 (vector 0 -1 0))
+     (pdata-set! "n" 9 (vector 0 -1 0))
      (pdata-set! "n" 10 (vector 0 -1 0))
      (pdata-set! "n" 11 (vector 0 -1 0))
-     
-     (pdata-set! "p" 12 (vector -1 0 depth)) 
-     (pdata-set! "p" 13 (vector -1 0 0)) 
+
+     (pdata-set! "p" 12 (vector -1 0 depth))
+     (pdata-set! "p" 13 (vector -1 0 0))
      (pdata-set! "p" 14 (vector -1 1 0))
-     (pdata-set! "p" 15 (vector -1 1 depth)) 
-     
-     (pdata-set! "n" 12 (vector -1 0 0)) 
-     (pdata-set! "n" 13 (vector -1 0 0)) 
+     (pdata-set! "p" 15 (vector -1 1 depth))
+
+     (pdata-set! "n" 12 (vector -1 0 0))
+     (pdata-set! "n" 13 (vector -1 0 0))
      (pdata-set! "n" 14 (vector -1 0 0))
      (pdata-set! "n" 15 (vector -1 0 0)))
     (else
@@ -284,7 +291,7 @@
      (pdata-set! "n" 1 (vector 0 -1 0))
      (pdata-set! "n" 2 (vector 0 -1 0))
      (pdata-set! "n" 3 (vector 0 -1 0))
-     
+
      (pdata-set! "p" 4 (vector 5 0 0))
      (pdata-set! "p" 5 (vector 5 0 depth))
      (pdata-set! "p" 6 (vector 5 1 depth))
@@ -293,7 +300,7 @@
      (pdata-set! "n" 5 (vector 1 0 0))
      (pdata-set! "n" 6 (vector 1 0 0))
      (pdata-set! "n" 7 (vector 1 0 0))
-     
+
      (pdata-set! "p" 8 (vector 5 1 0))
      (pdata-set! "p" 9 (vector 5 1 depth))
      (pdata-set! "p" 10 (vector -1 1 depth))
@@ -302,7 +309,7 @@
      (pdata-set! "n" 9 (vector 0 1 0))
      (pdata-set! "n" 10 (vector 0 1 0))
      (pdata-set! "n" 11 (vector 0 1 0))
-     
+
      (pdata-set! "p" 12 (vector 0 0 depth))
      (pdata-set! "p" 13 (vector 0 0 0))
      (pdata-set! "p" 14 (vector 0 0 0)) ; --
@@ -310,8 +317,8 @@
      (pdata-set! "n" 12 (vector 1 0 0))
      (pdata-set! "n" 13 (vector 1 0 0))
      (pdata-set! "n" 14 (vector 1 0 0))
-     (pdata-set! "n" 15 (vector 1 0 0))                            
-     
+     (pdata-set! "n" 15 (vector 1 0 0))
+
      (pdata-set! "p" 16 (vector -1 1 0))
      (pdata-set! "p" 17 (vector -1 1 depth))
      (pdata-set! "p" 18 (vector -1 -1 depth)) ;--
@@ -319,8 +326,8 @@
      (pdata-set! "n" 16 (vector -1 0 0))
      (pdata-set! "n" 17 (vector -1 0 0))
      (pdata-set! "n" 18 (vector -1 0 0))
-     (pdata-set! "n" 19 (vector -1 0 0))                            
-     
+     (pdata-set! "n" 19 (vector -1 0 0))
+
      (pdata-set! "p" 20 (vector -1 -1 0)) ;--
      (pdata-set! "p" 21 (vector -1 -1 depth)) ;--
      (pdata-set! "p" 22 (vector 5 -1 depth)) ;--
@@ -328,8 +335,8 @@
      (pdata-set! "n" 20 (vector 0 -1 0))
      (pdata-set! "n" 21 (vector 0 -1 0))
      (pdata-set! "n" 22 (vector 0 -1 0))
-     (pdata-set! "n" 23 (vector 0 -1 0))                            
-     
+     (pdata-set! "n" 23 (vector 0 -1 0))
+
      (pdata-set! "p" 24 (vector 5 -1 0)) ;--
      (pdata-set! "p" 25 (vector 5 -1 depth)) ;--
      (pdata-set! "p" 26 (vector 5 0 depth)) ;--
@@ -337,8 +344,8 @@
      (pdata-set! "n" 24 (vector 1 0 0))
      (pdata-set! "n" 25 (vector 1 0 0))
      (pdata-set! "n" 26 (vector 1 0 0))
-     (pdata-set! "n" 27 (vector 1 0 0))                            
-     
+     (pdata-set! "n" 27 (vector 1 0 0))
+
      (pdata-set! "p" 28 (vector 5 0 0)) ;--
      (pdata-set! "p" 29 (vector 5 0 depth)) ;--
      (pdata-set! "p" 30 (vector 0 0 depth)) ; --
@@ -347,7 +354,7 @@
      (pdata-set! "n" 29 (vector 0 1 0))
      (pdata-set! "n" 30 (vector 0 1 0))
      (pdata-set! "n" 31 (vector 0 1 0))))
-   
+
    (pdata-copy "p" "pref")))
 
   (list text children empty-ghost prim text-prim depth-shape-prim #f #f)))
@@ -376,7 +383,7 @@
 (define (brick-for-each fn b)
   (fn b)
   (when (brick-children b)
-        (for-each 
+        (for-each
          (lambda (c)
            (brick-for-each fn c))
          (brick-children b))))
@@ -390,32 +397,32 @@
 (define (brick-modify-all-children fn b)
   (if (brick-is-atom? b)
       (fn b)
-      (brick-modify-children 
+      (brick-modify-children
        (lambda (children)
          (map
-          (lambda (child) 
+          (lambda (child)
             (brick-modify-all-children fn child))
           children))
        (fn b))))
 
 (define (brick-modify-brick fn b id)
   ;; check ourself first
-  (if (eq? (brick-id b) id) 
+  (if (eq? (brick-id b) id)
       (fn b)
       ;; search children
       (if (brick-is-atom? b)
           b
-          (brick-modify-children 
+          (brick-modify-children
            (lambda (children)
              (map
-              (lambda (child) 
+              (lambda (child)
                 (brick-modify-brick fn child id))
               children))
            b))))
-  
+
 (define (brick-search b id)
   ;; check ourself first
-  (if (eq? (brick-id b) id) 
+  (if (eq? (brick-id b) id)
       b
       ;; search children
       (if (brick-is-atom? b)
@@ -430,7 +437,7 @@
            (brick-children b)))))
 
 (define (brick-search-for-parent b id)
-  (if (brick-is-atom? b) 
+  (if (brick-is-atom? b)
       #f
       ;; search children
       (foldl
@@ -444,42 +451,42 @@
        (brick-children b))))
 
 (define (brick-transparent! b a)
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (opacity a)
    ;(hint-nozwrite)
    )
-  (with-primitive 
+  (with-primitive
    (brick-depth b)
    (opacity a)
    ;(hint-nozwrite)
    ))
 
 (define (brick-opaque! b)
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (opacity 1)
    (hint-none)(hint-solid))
-  (with-primitive 
+  (with-primitive
    (brick-depth b)
    (opacity 1)
    (hint-none)(hint-solid)))
 
 (define (brick-text-glow! p)
-  (with-primitive 
+  (with-primitive
    p
    (colour (+ 0.5 (fmod (* 4 (flxtime)) 0.5)))))
 
 (define (brick-code-glow! p)
-  (with-primitive 
+  (with-primitive
    p
-   (colour (vmix 
-            (vector 1 0 0) 
-            (vector 1 1 0) 
+   (colour (vmix
+            (vector 1 0 0)
+            (vector 1 1 0)
             (abs (sin (* (flxtime) 2)))))))
 
 (define (brick-get-scale b)
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (let ((tx (get-transform)))
      (vmag (vector
@@ -488,11 +495,11 @@
             (vector-ref tx 11))))))
 
 (define (brick-expand! b n)
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (for ((i (in-range 4 8)))
         (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0)))))
-  (with-primitive 
+  (with-primitive
    (brick-depth b)
    (for-each (lambda (i)
                (pdata-set! "p" i (vadd (pdata-ref "pref" i) (vector 0 (- n) 0))))
@@ -505,23 +512,23 @@
       (foldl
        (lambda (child n)
          (+ n (brick-size child)))
-       (if (ghost-pos (brick-ghost b)) 
+       (if (ghost-pos (brick-ghost b))
            (ghost-size (brick-ghost b)) 0)
        (brick-children b))
       0))
-  
+
 (define (make-brick-from-atom code)
   (make-brick (text-from-code code) #f))
 
 (define (code->brick code)
-  (cond 
+  (cond
    ;; atom
    ((not (list? code)) (make-brick-from-atom code))
    ;; empty list
    ((null? code) (make-brick "" '()))
    ;; list starting with atom
    ((not (list? (car code)))
-    (make-brick  
+    (make-brick
      (text-from-code (car code))
      (map
       (lambda (item)
@@ -529,7 +536,7 @@
       (cdr code))))
    ;; anoymous list
    (else
-    (make-brick  
+    (make-brick
      ""
      (map
       (lambda (item)
@@ -548,7 +555,7 @@
 
 ;; does the flashing when it plays the sound business
 (define (brick-code-inserts b)
-  (cond 
+  (cond
    ((and (eq? 2 (length (brick-children b)))
          (string=? "play" (brick-text b)))
     (string-append " 0 (lambda () (with-primitive " (number->string (brick-id b))
@@ -562,7 +569,7 @@
                    "(with-primitive " (number->string (brick-depth b))
                    " (colour (vector 1 1 1))))"))
    (else "")))
-  
+
 (define (brick->text b do-insert)
   (if (brick-is-atom? b)
       (brick-text b)
@@ -572,7 +579,7 @@
                        (apply string-append
                               (map
                                (lambda (child)
-                                 (string-append 
+                                 (string-append
                                   (brick->text child do-insert) " "))
                                (brick-children b)))))
        (if do-insert (brick-code-inserts b) "") ")")))
@@ -587,17 +594,17 @@
         (map brick->sexpr (brick-children b))))))
 
 (define (brick-pos->slot b pos)
-  (let ((relative-y 
+  (let ((relative-y
          (vy (vsub
-              (with-primitive 
-               (brick-id b) 
+              (with-primitive
+               (brick-id b)
                (vtransform (vector 0 0 0) (get-global-transform)))
               pos))))
     (car (foldl
           (lambda (child r)
             (list
              ;; if we are lower than relative-y
-             (if (< (+ (cadr r) drop-fudge) relative-y) 
+             (if (< (+ (cadr r) drop-fudge) relative-y)
                  (+ (car r) 1) ; keep adding
                  (car r)) ; return this index
              (+ (cadr r) (brick-size child))))
@@ -610,10 +617,10 @@
    b))
 
 (define (brick-dock b new)
-  (cond ((or (brick-parent-locked b) 
+  (cond ((or (brick-parent-locked b)
              (brick-locked b)) b)
         (else
-         (with-primitive 
+         (with-primitive
           (brick-id new)
           (identity)
           (parent (brick-id b)))
@@ -637,38 +644,38 @@
 
 ; update the primitive and children to match the state
 (define (brick-update! b d)
-  (with-primitive 
+  (with-primitive
    (brick-text-prim b)
    (set-text (brick-text b)))
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (colour (vector 1 (/ (modulo d 6) 6) (/ (modulo d 4) 4))))
-  (with-primitive 
+  (with-primitive
    (brick-depth b)
    (colour (vector 1 (/ (modulo d 6) 6) (/ (modulo d 4) 4))))
   (when (not (brick-is-atom? b))
         (let ((size
-               (car 
+               (car
                 (foldl
                  (lambda (child p)
-                   (with-primitive 
+                   (with-primitive
                     (brick-id child)
                     (identity)
                     (parent (brick-id b))
                     (when (brick-locked b) (translate (vector 0 (* (cadr p) -1.3) 0)))
                     (translate (vector 1 (- (car p)) 0)))
-                   (brick-update! child (+ d 1)) 
+                   (brick-update! child (+ d 1))
                    (list
                     (if (and (ghost-pos (brick-ghost b))
-                             (eq? (ghost-pos (brick-ghost b)) 
-                                  (+ (cadr p) 
+                             (eq? (ghost-pos (brick-ghost b))
+                                  (+ (cadr p)
                                      (ghost-size (brick-ghost b)))))
                         ;; insert ghost
-                        (+ (car p) (brick-size child) 
+                        (+ (car p) (brick-size child)
                            (ghost-size (brick-ghost b)))
                         (+ (car p) (brick-size child)))
                     (+ (cadr p) 1)))
-                 (list 
+                 (list
                   (if (and (ghost-pos (brick-ghost b))
                            (eq? (ghost-pos (brick-ghost b)) 0))
                       (+ 1 (ghost-size (brick-ghost b))) 1)
@@ -677,14 +684,14 @@
           (brick-expand! b (- size 1)))))
 
 #;(define (brick-intersect b line)
-  (with-primitive 
+  (with-primitive
    (brick-id b)
    (let ((p (geo/line-intersect (vtransform (car line) (minverse (get-global-transform)))
                                 (vtransform (cadr line) (minverse (get-global-transform)))))
          (m (get-global-transform)))
      (if (not (null? p))
          b
-         (if (not (brick-is-atom? b)) 
+         (if (not (brick-is-atom? b))
              (foldl
               (lambda (child r)
                 (if (not r) (brick-intersect child line) r))
@@ -693,7 +700,7 @@
              #f)))))
 
 (define (brick-intersect b pos)
-  (let ((hit (if (not (brick-is-atom? b)) 
+  (let ((hit (if (not (brick-is-atom? b))
                  (foldl
                   (lambda (child r)
                     (if (not r) (brick-intersect child pos) r))
@@ -701,7 +708,7 @@
                   (brick-children b))
                  #f)))
     (if (not hit)
-        (with-primitive 
+        (with-primitive
          (brick-id b)
          (recalc-bb)
          (if (bb/point-intersect? pos 0.1) b #f))
@@ -715,14 +722,14 @@
                   #f
                   (brick-children b))))
         (if (not hit)
-            (with-primitive 
+            (with-primitive
              (brick-id b)
              (recalc-bb)
              (if (bb/point-intersect? pos 0.1) b #f))
             hit))
       #f))
 
-;---------------------------------------------------------  
+;---------------------------------------------------------
 
 (define (make-bricks)
   (list '() (vector 0 0 0) #f #f #f #f #f '() #f
@@ -755,8 +762,8 @@
 
 (define (bricks-save b fn)
   (let ((f (open-output-file fn #:exists 'replace)))
-    (write 
-     (map 
+    (write
+     (map
       (lambda (root)
         (list
          (with-primitive (brick-id root) (get-global-transform))
@@ -767,14 +774,19 @@
 
 (define (bricks-load b fn)
   (let* ((f (open-input-file fn))
-         (ret (foldl 
+         (ret (foldl
                (lambda (e b)
-                 (println (cadr e))
-                 (let ((brick (code->brick (eval-string (string-append "'" (cadr e))))))
-                   (with-primitive 
-                    (brick-id brick) 
-                    (concat (car e)))
-                   (bricks-add-root b brick)))
+                 (println "-" (cadr e) "-")
+                 (if (not (string=? (cadr e) ""))
+                     (let ((brick
+                            (code->brick
+                             (eval-string
+                              (string-append "'" (cadr e))))))
+                       (with-primitive
+                        (brick-id brick)
+                        (concat (car e)))
+                       (bricks-add-root b brick))
+                     b))
                b
                (read f))))
     (close-input-port f)
@@ -792,21 +804,21 @@
     (write (+ h 1) f)
     (close-output-port f)
     (+ h 1)))
-  
+
 (define (bricks-load-history b)
-  (bricks-load 
-   (bricks-clear b) 
-   (string-append 
-    "history/" 
-    (number->string (bricks-history b)) 
+  (bricks-load
+   (bricks-clear b)
+   (string-append
+    "history/"
+    (number->string (bricks-history b))
     ".scm")))
 
 (define (bricks-save-history! b)
-  (bricks-save 
-   b 
-   (string-append 
-    "history/" 
-    (number->string (increase-history!)) 
+  (bricks-save
+   b
+   (string-append
+    "history/"
+    (number->string (increase-history!))
     ".scm")))
 
 (define (bricks-modify-brick fn b id)
@@ -821,14 +833,14 @@
 (define (bricks-delete b brick)
   (let* ((id (brick-id brick))
          (parent (bricks-search-for-parent b id))
-         (new-b (if parent 
-                    (bricks-modify-brick 
+         (new-b (if parent
+                    (bricks-modify-brick
                      (lambda (parent)
                        (brick-undock parent id))
                      b (brick-id parent))
                     (bricks-modify-roots
                      (lambda (roots)
-                       (filter 
+                       (filter
                         (lambda (r)
                           (not (eq? (brick-id r) id)))
                         roots))
@@ -852,23 +864,23 @@
    b))
 
 (define (bricks-clear b)
-  (for-each 
+  (for-each
    (lambda (root)
      (when (not (brick-locked root))
            (brick-destroy! root)))
    (bricks-roots b))
-  (bricks-modify-roots 
-   (lambda (r) (list (car r))) 
+  (bricks-modify-roots
+   (lambda (r) (list (car r)))
    (bricks-modify-code-current
     (lambda (c) #f)
     (bricks-modify-typing-current
      (lambda (t) #f)
-     b)))) 
+     b))))
 
 (define (bricks->text b)
   (apply
    string-append
-   (map brick->text 
+   (map brick->text
         (filter (lambda (brx)
                   (not (brick-locked brx)))
                 (bricks-roots b))
@@ -884,25 +896,25 @@
   (let ((copy (code->brick (brick->code brick)))
         ;; copy the transform
         (tx (with-primitive (brick-id brick) (get-global-transform))))
-    (brick-for-each 
+    (brick-for-each
      (lambda (brick)
        (brick-transparent! brick drag-transparent)) ;; make transparent as we are dragging
      copy)
-    (with-primitive (brick-id copy) (identity) (concat tx) (scale 2)) 
-    (bricks-modify-current 
-     (lambda (c) copy) 
+    (with-primitive (brick-id copy) (identity) (concat tx) (scale 2))
+    (bricks-modify-current
+     (lambda (c) copy)
      (bricks-add-root b copy))))
-       
+
 (define (bricks-add-code b code)
   (bricks-add-root b (code->brick code)))
 
 (define (bricks-get-over b pos)
   (foldl
    (lambda (brick r)
-     (if (and 
+     (if (and
           (not r) ;; not found anything yet
           (or
-           (not (bricks-current b)) ;; not dragging anything     
+           (not (bricks-current b)) ;; not dragging anything
            ;; what we are dragging is not this
            (not (eq? (brick-id brick) (brick-id (bricks-current b))))))
          (brick-intersect brick pos)
@@ -913,10 +925,10 @@
 (define (bricks-get-over-no-atoms b pos)
   (foldl
    (lambda (brick r)
-     (if (and 
+     (if (and
           (not r) ;; not found anything yet
           (or
-           (not (bricks-current b)) ;; not dragging anything     
+           (not (bricks-current b)) ;; not dragging anything
            ;; what we are dragging is not this
            (not (eq? (brick-id brick) (brick-id (bricks-current b))))))
          (brick-intersect-no-atoms brick pos)
@@ -970,13 +982,13 @@
   ;; modify the brick text based on the keys pressed
   (foldl
    (lambda (key r)
-     (if (char? key)             
-         (cond             
+     (if (char? key)
+         (cond
           ((eq? (char->integer key) 8) ; delete (128 on mac)
            (if (> (string-length (brick-text r)) 0)
                (brick-modify-text
                 (lambda (t)
-                  (substring 
+                  (substring
                    t 0 (- (string-length t) 1)))
                 r) r))
           (else
@@ -995,7 +1007,7 @@
           (lambda (key)
             (not (in-list? key (bricks-keys b))))
           (keys-down))))
-    (bricks-modify-keys 
+    (bricks-modify-keys
      (lambda (k) (keys-down))
      ;; dispatch
      (cond
@@ -1008,14 +1020,14 @@
               (bricks-type-into b bx keys-pressed)
               bx))
         (if (keys-contains-enter? keys-pressed)
-            (bricks-modify-typing-current 
+            (bricks-modify-typing-current
              (lambda (t) #f)
              b)
             b)
         (brick-id (bricks-typing-current b))))
 
       ;; do execute key if we have a code selection
-      ((and (in-list? #\x keys-pressed)   
+      ((and (in-list? #\x keys-pressed)
             (bricks-code-current b))
        (let ((current (bricks-search b (bricks-code-current b))))
          (bricks-save-history! b)
@@ -1026,19 +1038,19 @@
          b))
 
       ;; do copy when code selection is active
-      ((and (in-list? #\C keys-pressed)   
+      ((and (in-list? #\C keys-pressed)
             (bricks-code-current b))
-       (bricks-add-root 
-        b 
-        (code->brick 
+       (bricks-add-root
+        b
+        (code->brick
          (brick->code (bricks-search b (bricks-code-current b))))))
 
       ;; keyboard alt for middle mouse (h)
       ((in-list? #\h keys-pressed)
-       (bricks-modify-code-current 
+       (bricks-modify-code-current
         (lambda (o)
           (let ((brick (bricks-get-over b pos)))
-            (if brick (brick-id brick) #f))) 
+            (if brick (brick-id brick) #f)))
         b))
 
       ;; o saves
@@ -1051,16 +1063,16 @@
       ;; history navigation, backwards
       ((in-list? #\, keys-pressed)
        (bricks-load-history
-        (bricks-modify-history 
+        (bricks-modify-history
          (lambda (h) (max 1 (- h 1))) b)))
-      
+
       ;; history navigation, forwards
       ((in-list? #\. keys-pressed)
        (let* ((f (open-input-file "history/persist.scm"))
               (max (read f)))
          (close-input-port f)
          (bricks-load-history
-          (bricks-modify-history 
+          (bricks-modify-history
            (lambda (h) (min max (+ h 1))) b))))
 
       ((in-list? #\P keys-pressed)
@@ -1096,8 +1108,8 @@
 (define (bricks-update-current b pos)
   (bricks-modify-current
    (lambda (current)
-     (cond 
-      ((bricks-mouse-down b) 
+     (cond
+      ((bricks-mouse-down b)
        (let ((c (bricks-get-over b pos)))
          (when (and c (not (brick-parent-locked c)))
                (brick-for-each
@@ -1105,7 +1117,7 @@
                   (brick-transparent! c drag-transparent))
                 c))
          c))
-      ((bricks-mouse-up b) 
+      ((bricks-mouse-up b)
        (when current
              (brick-for-each
               (lambda (c)
@@ -1113,7 +1125,7 @@
               current))
        #f)
       (else current)))
-   ;; if we are dragging something 
+   ;; if we are dragging something
    (if (bricks-current b)
        (bricks-do-dragging b pos)
        b)))
@@ -1123,7 +1135,7 @@
     (when over
           (let ((root (bricks-root-search b (brick-id over))))
             (if (brick-locked root) ;; it's the palette, translate
-                (with-primitive 
+                (with-primitive
                  (brick-id root)
                  (when (or (< (mouse-wheel) 0) (key-special-pressed 103))
                        (translate (vector 0 6 0)))
@@ -1148,17 +1160,17 @@
 (define (bricks-do-input b pos)
   (bricks-do-mouse-wheel
    (bricks-do-keys
-    (bricks-modify-mouse 
+    (bricks-modify-mouse
      (lambda (m) pos)
-     (bricks-modify-code-current 
-      (lambda (o) 
+     (bricks-modify-code-current
+      (lambda (o)
         (if (mouse-button 2)
             (let ((brick (bricks-get-over b pos)))
               (if brick (brick-id brick) #f))
             o))
       (bricks-modify-typing
        (lambda (t) (mouse-button 3))
-       (bricks-modify-button 
+       (bricks-modify-button
         (lambda (button) (mouse-button 1))
         ;; keep track of the selection
         (bricks-update-current b pos))))) pos) pos))
@@ -1185,7 +1197,7 @@
       (let* ((id (brick-id (bricks-current b)))
              (new-parent-id (brick-id (bricks-drop-over new-b))))
         (bricks-remove-root
-         (bricks-modify-brick 
+         (bricks-modify-brick
           (lambda (new-parent)
             ;; docks to the ghost location
             (brick-dock new-parent (bricks-current b)))
@@ -1207,7 +1219,7 @@
                 ;; add as new root
                 (bricks-add-root
                  ;; undock from parent
-                 (bricks-modify-brick 
+                 (bricks-modify-brick
                   (lambda (parent)
                     (brick-undock parent id))
                   new-b
@@ -1220,7 +1232,7 @@
   ;; check for brick to undock
   (if (bricks-over-out? b new-b)
       (let* ((id (brick-id (bricks-drop-over b))))
-        (bricks-modify-brick 
+        (bricks-modify-brick
          (lambda (over)
            (brick-clear-ghost over))
          new-b
@@ -1241,19 +1253,19 @@
     (when tc
           (brick-text-glow! (brick-id tc))
           (brick-text-glow! (brick-depth tc)))
-  
+
   (let ((tc (bricks-code-current b)))
     (when tc
           (brick-code-glow! tc)
           #;(brick-code-glow! (brick-depth tc))))))
-                
+
 (define (bricks-update! b)
   (let* ((pos (vadd (vector 0 drop-fudge 0) (get-point-from-mouse))))
     #;(with-primitive pointer
                     (identity)
                     (translate pos))
     (when
-    ; update bricks when mouse button is held down 
+    ; update bricks when mouse button is held down
      ; TODO - check for optimisation
      (or #t (bricks-button b))
       (for-each
@@ -1265,7 +1277,7 @@
 
     ; move the current brick
     (when (list? (bricks-current b))
-          (with-primitive 
+          (with-primitive
            (brick-id (bricks-current b))
            (when (and (mouse-button 1) (bricks-button b))
                  (translate (vdiv
@@ -1276,11 +1288,11 @@
     ; update the input stuff
     (bricks-do-typing
      b (bricks-remove-ghost
-        b (bricks-do-docking  
-           b (bricks-do-undocking 
+        b (bricks-do-docking
+           b (bricks-do-undocking
               b (bricks-do-input b pos)))) pos)))
 
-;---------------------------------------------------------  
+;---------------------------------------------------------
 
 (clear)
 ;(hint-depth-sort)
@@ -1289,7 +1301,7 @@
 
 (define b
   (bricks-add-code
-    (make-bricks) 
+    (make-bricks)
    palette))
 
 ;; activate palette
@@ -1297,14 +1309,14 @@
          (lambda (palette)
            (brick-for-each
             (lambda (c)
-              (with-primitive 
+              (with-primitive
                (brick-id c)
                (opacity 0.8))
-              (with-primitive 
+              (with-primitive
                (brick-depth c)
                (opacity 0.8)))
             palette)
-           ;; collapse the verts as we want to hide, but want to 
+           ;; collapse the verts as we want to hide, but want to
            ;; keep the children visible
            (with-primitive (brick-id palette)
                            (translate (vector 25 10 0))
@@ -1314,11 +1326,11 @@
            (with-primitive (brick-depth palette)
                            (opacity 0)
                            (hint-nozwrite))
-           (brick-modify-locked 
-            (lambda (l) #t) 
+           (brick-modify-locked
+            (lambda (l) #t)
             (brick-modify-all-children
              (lambda (c)
-               (brick-modify-parent-locked 
+               (brick-modify-parent-locked
                 (lambda (p) #t) c))
              palette)))
          b
@@ -1327,14 +1339,16 @@
 (define pointer (with-state (scale 0.1) (build-cube)))
 
 ;(clear-colour (vector 0.5 0.2 0.1))
-(define t (with-state 
+(define t (with-state
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
            (colour (vector 0 0.5 1)) (build-cube)))
 
-(when sound-check (set! b (bricks-load b "sc.scm"))) 
+(when sound-check (set! b (bricks-load b "sc2.scm")))
+(when sound-fac (set! b (bricks-load b "fac.scm")))
+;(set! b (bricks-load b "click.scm"))
 
-(every-frame 
+(every-frame
  (begin
    (with-primitive pointer
                    (identity)

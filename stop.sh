@@ -1,2 +1,2 @@
 killall fluxus
-
+killall syncup
