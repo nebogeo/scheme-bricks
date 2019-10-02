@@ -22,7 +22,7 @@
 
 (require mzlib/string)
 
-(require fluxus-018/fluxa)
+(require fluxus/fluxa)
 (define drop-fudge 0)
 (define lag-fudge 0.7)
 (define drag-transparent 0.75)
@@ -48,19 +48,20 @@
                   0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
                   (white) (pink) (sample) (adsr 0 0.1 0 0) (mooglp)
                   (mooghp) (moogbp) (rndf) (note) (random 100)
-                  (modulo clock 8)
+                  (modulo clock 8)          
                   (pick (list 0.1 0.2) clock)
+				  (pat-pick (list 1 0 2 0 1 2 0 2) (list) clock)
                   (if (even? clock) 0.25 0.5)
-                  (mass (lambda (f) ) (note (modulo clock 4)) (list 1 2 1.3))
+                  ;;(mass (lambda (f) ) (note (modulo clock 4)) (list 1 2 1.3))
                   (bootstrap (lambda () zop) 4)
                   (define (zop time clock zap) (if (modeq? clock 8) 
                                                    (in time 0.5 zop (+ clock 1) zap) 
                                                    (in time 0.5 zop (+ clock 1) zap)))
                   (play time (* (adsr 0 0.1 0.1 1) (sine 100) (sine 400)))
                   (play time (* (adsr 0 0.1 0 0) (pick (list (sine (* 100 (adsr 0 0.1 0 0))) (white 3)) clock)))
-                  (play time (* (adsr 0 0.1 0 0) (sine (+ 440 (* 440 (sine 100))))))
-                  (play time (mooglp (* (adsr 0 0.1 0 0) (let ((p 100)) (+ (saw p) (saw (* p 2.5))))) (pick (list 0.3 0.2 0.8) clock) 0.1))
-                  (play time (echo (formant (* (adsr 1 2 0.2 1) (saw (+ (* 50 (modulo clock 2) (modulo clock 7)) (* 5 (adsr 0.3 0.6 0 0))))) (pick (list 0 0.3 0.5 1 0.8) clock) 0.1) 0.75 0.6))
+                  ;;(play time (* (adsr 0 0.1 0 0) (sine (+ 440 (* 440 (sine 100))))))
+                  ;;(play time (mooglp (* (adsr 0 0.1 0 0) (let ((p 100)) (+ (saw p) (saw (* p 2.5))))) (pick (list 0.3 0.2 0.8) clock) 0.1))
+                  ;;(play time (echo (formant (* (adsr 1 2 0.2 1) (saw (+ (* 50 (modulo clock 2) (modulo clock 7)) (* 5 (adsr 0.3 0.6 0 0))))) (pick (list 0 0.3 0.5 1 0.8) clock) 0.1) 0.75 0.6))
                   (sample (pick (list "ia.wav" "ib.wav" "ic.wav" "id.wav")) 440) 
                   ))
 
@@ -141,12 +142,21 @@
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+(define last-aspect 0)
+
 (define (get-line-from-mouse)
-  (let* ((ndcpos (vector (* (- (/ (mouse-x) (vx (get-screen-size))) 0.5) 2)
-                         (* (- (- (/ (mouse-y) (vy (get-screen-size))) 0.5)) 1.5) -1))
-         (scrpos2 (vtransform (vmul ndcpos 500) (minverse (get-camera-transform))))
-         (scrpos (vtransform ndcpos (minverse (get-camera-transform)))))
+  (let* ((aspect (/ (vy (get-screen-size)) (vx (get-screen-size))))
+     (ndcpos (vector
+          (* (- (/ (mouse-x) (vx (get-screen-size))) 0.5) 2)
+          (* (- (- (/ (mouse-y) (vy (get-screen-size))) 0.5)) (* 2 aspect))
+          -1))
+        (scrpos2 (vtransform (vmul ndcpos 500) (minverse (get-camera-transform))))
+    (scrpos (vtransform ndcpos (minverse (get-camera-transform)))))
+    (when (not (eq? aspect last-aspect))
+      (frustum -1 1 (- aspect) aspect))
     (list scrpos scrpos2)))
+
+
 
 (define (get-point-from-mouse)
   (let ((line (get-line-from-mouse)))
@@ -201,7 +211,7 @@
          (depth-shape-prim (build-polygons (if atom 16 32) 'quad-list))
          (text-prim  (with-state
                       (parent prim)
-                      (translate (vector -0.9 1.1 0.0001))
+                      (translate (vector -0.9 1.1 0.001))
                       (hint-unlit)
                       (hint-depth-sort)
                       (colour 0)
@@ -237,8 +247,8 @@
 
     (let ((depth -3))
 
-
-    (with-primitive
+      
+  (with-primitive
    depth-shape-prim
    (parent prim)
    (cond
@@ -355,6 +365,13 @@
      (pdata-set! "n" 30 (vector 0 1 0))
      (pdata-set! "n" 31 (vector 0 1 0))))
 
+   (pdata-map!
+    (lambda (p)
+      (if (< (vz p) (/ depth 2))
+      (vadd p (vector 0.5 0.5 0))
+      p))
+    "p")
+   
    (pdata-copy "p" "pref")))
 
   (list text children empty-ghost prim text-prim depth-shape-prim #f #f)))
@@ -471,6 +488,16 @@
    (brick-depth b)
    (opacity 1)
    (hint-none)(hint-solid)))
+
+(define col-stop-a (vector 1 0 0.5))
+(define col-stop-b (vector 1 1 0))
+(define col-stop-c (vector 0.5 0 1))
+
+(define (brick-col d)
+  (vlerp
+   col-stop-a 
+   (vlerp col-stop-b col-stop-c (/ (modulo (quotient d 3) 7) 7))
+   (/ (modulo d 4) 4)))
 
 (define (brick-text-glow! p)
   (with-primitive
@@ -649,10 +676,10 @@
    (set-text (brick-text b)))
   (with-primitive
    (brick-id b)
-   (colour (vector 1 (/ (modulo d 6) 6) (/ (modulo d 4) 4))))
+   (colour (brick-col d)))
   (with-primitive
    (brick-depth b)
-   (colour (vector 1 (/ (modulo d 6) 6) (/ (modulo d 4) 4))))
+   (colour (brick-col d)))
   (when (not (brick-is-atom? b))
         (let ((size
                (car
@@ -1297,7 +1324,29 @@
 (clear)
 ;(hint-depth-sort)
 
-(set-camera-transform (mtranslate (vector 0 0 -30)))
+(ortho)
+(set-ortho-zoom 30)
+
+;; ancient fluxus bug 
+(define light-setup 0)
+
+(define (setup-lights)
+  (cond
+   ((eq? light-setup 5)
+    (light-diffuse 0 (vector 0 0 0))
+    (light-specular 0 (vector 0 0 0))
+    (light-ambient 0 (vector 1 1 1))
+    (define mylight (make-light 'directional 'free))
+    (display mylight)(newline)
+    (light-position mylight (vector 0 0 0))
+    (light-direction mylight (vector 0.3 0.7 1))
+    (light-diffuse mylight (vector 1.5 1.5 1.5))
+    (light-ambient mylight (vector 0 0 0))
+    (set! light-setup 10))
+   (else (set! light-setup (+ light-setup 1)))))
+
+(set-camera-transform
+ (mtranslate (vector 0 0 -30)))
 
 (define b
   (bricks-add-code
@@ -1344,8 +1393,9 @@
            (scale (vector 1 1 1))
            (colour (vector 0 0.5 1)) (build-cube)))
 
-(when sound-check (set! b (bricks-load b "sc2.scm")))
-(when sound-fac (set! b (bricks-load b "fac.scm")))
+(set! b (bricks-load b "splatter.scm"))
+;;(when sound-check (set! b (bricks-load b "sc2.scm")))
+;;(when sound-fac (set! b (bricks-load b "fac.scm")))
 ;(set! b (bricks-load b "click.scm"))
 
 (every-frame
@@ -1355,4 +1405,5 @@
                    (translate (get-point-from-mouse))
                    (scale 0.1))
    (set! b (bricks-update! b))
+   (setup-lights)
    (with-primitive t (rotate (vector 1 2 3)))))
