@@ -19,7 +19,6 @@
 ;; * drop messed up from bottom
 ;; * right click text edit
 
-
 (require mzlib/string)
 
 (require fluxus/fluxa)
@@ -33,7 +32,7 @@
 (define sound-fac #f)
 
 (define (reset)
-  (clear-pings!)
+  ;;(clear-pings!)
   (searchpath "/home/dave/noiz/nm/")
   (reload)
   )
@@ -43,27 +42,35 @@
 
 (reset)
 
-(define palette '(
-                  () (play-now) (seq) (lambda) (reset) time clock sync-tempo
+(define palette '(() (play-now) (seq) (lambda) (reset) (reload) time clock sync-tempo
                   0 0.1 440 (play) (+) (*) (/) (-) (sine) (squ) (saw)
                   (white) (pink) (sample) (adsr 0 0.1 0 0) (mooglp)
-                  (mooghp) (moogbp) (rndf) (note) (random 100)
-                  (modulo clock 8)          
-                  (pick (list 0.1 0.2) clock)
-				  (pat-pick (list 1 0 2 0 1 2 0 2) (list) clock)
-                  (if (even? clock) 0.25 0.5)
-                  ;;(mass (lambda (f) ) (note (modulo clock 4)) (list 1 2 1.3))
-                  (bootstrap (lambda () zop) 4)
-                  (define (zop time clock zap) (if (modeq? clock 8) 
-                                                   (in time 0.5 zop (+ clock 1) zap) 
-                                                   (in time 0.5 zop (+ clock 1) zap)))
-                  (play time (* (adsr 0 0.1 0.1 1) (sine 100) (sine 400)))
-                  (play time (* (adsr 0 0.1 0 0) (pick (list (sine (* 100 (adsr 0 0.1 0 0))) (white 3)) clock)))
-                  ;;(play time (* (adsr 0 0.1 0 0) (sine (+ 440 (* 440 (sine 100))))))
-                  ;;(play time (mooglp (* (adsr 0 0.1 0 0) (let ((p 100)) (+ (saw p) (saw (* p 2.5))))) (pick (list 0.3 0.2 0.8) clock) 0.1))
-                  ;;(play time (echo (formant (* (adsr 1 2 0.2 1) (saw (+ (* 50 (modulo clock 2) (modulo clock 7)) (* 5 (adsr 0.3 0.6 0 0))))) (pick (list 0 0.3 0.5 1 0.8) clock) 0.1) 0.75 0.6))
-                  (sample (pick (list "ia.wav" "ib.wav" "ic.wav" "id.wav")) 440) 
-                  ))
+                  (rndf) (note)
+          (bootstrap (lambda () zop))
+          (define (zop time clock zap)
+            (if (modeq? clock 8) 
+            (in time 0.5 zopp (+ clock 1) zap) 
+            (in time 0.5 zop (+ clock 1) zap)))
+                  (modulo clock 8)
+          (note (* 2 (+ (modulo clock 3) (modulo clock 4))))
+          (pick (list 0.1 0.2) clock)
+          (crush (pick (list 0.02 0.1 3 2 10) clock) 10)
+          (sine (* 200 (adsr 0 0.1 0.3 1)))
+          (mooghp (pink 10) (sine 0.1) 1)
+          (set-scale ethiopian) 
+          (set-scale lydian) 
+	  (play time (* (adsr 0 0.1 0.1 1)))
+          (tb (saw 440) (* (adsr 0 0.1 0 0) (pick (list 0 0.3 0.5 1 0.8) clock)) 0.4)
+	  (ks (random 1000) 0.9 0.1)
+	  (pad 220 (* (modulo clock 5) 0.001) 0.5 0.6)
+          (* (adsr 0 0.1 0.1 1) (sine 100) (sine 400))
+          (sine (+ 100 (* 400 (sine 400))))
+	  (+ 0.5 (* 0.5 (sine 1)))
+	  (sine (+ 110 (* (adsr (pick (list 0.2 0 0 0) clock) (pick (list 0.3 0.01 0.2) clock) 0.1 1) (pick (list 400 440 80) clock) (sine (/ (note (modulo zap 7)) 4)))))
+	  (sample (pick (list "MA.WAV" "SD2500.WAV" "LC25.WAV" "CL.WAV" "CH.WAV") clock) 300)
+	  (sample (pick (list "ij.wav" "ih.wav" "ik.wav" "id.wav" "il.wav" "ic.wav") clock) (* 50 (+ (modulor zap 8) (modulo clock 5))))
+	  (* 2 (sample (pick (list "b1.wav" "b2.wav" "b3.wav") zap) 440))
+	  ))
 
 (define (_println l)
   (map
@@ -1087,6 +1094,18 @@
       ((in-list? #\p keys-pressed)
        (bricks-load b "test.scm"))
 
+      ;; undo - load last saved history and set current
+      ((in-list? #\m keys-pressed)
+       (bricks-load-history
+        (bricks-modify-history
+	 (lambda (h)
+	   (let* ((p (open-input-file "history/persist.scm"))
+		  (r (read p)))
+	     (println "history level is: " r)
+	     (close-input-port p)
+	     r))
+	 b)))
+      
       ;; history navigation, backwards
       ((in-list? #\, keys-pressed)
        (bricks-load-history
@@ -1143,6 +1162,7 @@
                 (lambda (c)
                   (brick-transparent! c drag-transparent))
                 c))
+     (display c)(newline)
          c))
       ((bricks-mouse-up b)
        (when current
@@ -1348,9 +1368,11 @@
 (set-camera-transform
  (mtranslate (vector 0 0 -30)))
 
+
+
 (define b
   (bricks-add-code
-    (make-bricks)
+   (make-bricks)
    palette))
 
 ;; activate palette
@@ -1387,13 +1409,18 @@
 
 (define pointer (with-state (scale 0.1) (build-cube)))
 
+(set-scale pentatonic-major)
+(bootstrap (lambda () zop))
+	   
 ;(clear-colour (vector 0.5 0.2 0.1))
 (define t (with-state
            (translate (vector -28 -20 0))
            (scale (vector 1 1 1))
            (colour (vector 0 0.5 1)) (build-cube)))
 
-(set! b (bricks-load b "splatter.scm"))
+(set! b (bricks-load b "scenes/framework.scm"))
+;;(set! b (bricks-load b "scenes/mellow.scm"))
+;;(set! b (bricks-load b "scenes/.scm"))
 ;;(when sound-check (set! b (bricks-load b "sc2.scm")))
 ;;(when sound-fac (set! b (bricks-load b "fac.scm")))
 ;(set! b (bricks-load b "click.scm"))
@@ -1407,3 +1434,4 @@
    (set! b (bricks-update! b))
    (setup-lights)
    (with-primitive t (rotate (vector 1 2 3)))))
+
